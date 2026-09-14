@@ -8,7 +8,7 @@
       content="Geração e envio de relatórios fotográficos de manutenção."
     />
     <title>Sistema de Medição | Relatório Fotográfico</title>
-    <link rel="stylesheet" href="/styles.css?v=20260914-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260914-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -374,17 +374,17 @@
           <div class="photo-grid">
             <div class="photo-slot">
               <label class="photo-input is-entry">
-                <span class="photo-input__label">Foto de entrada</span>
+                <span class="photo-input__label">Foto de entrada 1</span>
                 <input
                   type="file"
                   accept="image/jpeg,image/png"
                   data-field="fotoAntes"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto de entrada" />
+                <img alt="Prévia da foto de entrada 1" />
               </label>
               <label class="photo-caption">
-                <span>Descrição da imagem de entrada</span>
+                <span>Descrição da foto de entrada 1</span>
                 <textarea
                   data-field="legendaAntes"
                   rows="2"
@@ -395,22 +395,64 @@
             </div>
             <div class="photo-slot">
               <label class="photo-input is-exit">
-                <span class="photo-input__label">Foto de saída</span>
+                <span class="photo-input__label">Foto de saída 1</span>
                 <input
                   type="file"
                   accept="image/jpeg,image/png"
                   data-field="fotoDepois"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto de saída" />
+                <img alt="Prévia da foto de saída 1" />
               </label>
               <label class="photo-caption">
-                <span>Descrição da imagem de saída</span>
+                <span>Descrição da foto de saída 1</span>
                 <textarea
                   data-field="legendaDepois"
                   rows="2"
                   maxlength="300"
                   placeholder="Ex.: Conexão substituída e vedada, sem vazamento"
+                ></textarea>
+              </label>
+            </div>
+            <div class="photo-slot">
+              <label class="photo-input is-entry">
+                <span class="photo-input__label">Foto de entrada 2</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  data-field="fotoAntes2"
+                />
+                <span class="photo-input__action">Selecionar imagem</span>
+                <img alt="Prévia da foto de entrada 2" />
+              </label>
+              <label class="photo-caption">
+                <span>Descrição da foto de entrada 2</span>
+                <textarea
+                  data-field="legendaAntes2"
+                  rows="2"
+                  maxlength="300"
+                  placeholder="Ex.: Outro ângulo do problema encontrado"
+                ></textarea>
+              </label>
+            </div>
+            <div class="photo-slot">
+              <label class="photo-input is-exit">
+                <span class="photo-input__label">Foto de saída 2</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  data-field="fotoDepois2"
+                />
+                <span class="photo-input__action">Selecionar imagem</span>
+                <img alt="Prévia da foto de saída 2" />
+              </label>
+              <label class="photo-caption">
+                <span>Descrição da foto de saída 2</span>
+                <textarea
+                  data-field="legendaDepois2"
+                  rows="2"
+                  maxlength="300"
+                  placeholder="Ex.: Outro ângulo do serviço concluído"
                 ></textarea>
               </label>
             </div>
@@ -460,6 +502,6 @@
     </template>
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="/app.js?v=20260914-1"></script>
+    <script src="/app.js?v=20260914-2"></script>
   </body>
 </html>

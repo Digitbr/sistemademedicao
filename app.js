@@ -216,8 +216,11 @@ function createActivityCard(data) {
       input
     ])
   );
-  const photos = { fotoAntes: "", fotoDepois: "" };
-  const photoPromises = { fotoAntes: Promise.resolve(), fotoDepois: Promise.resolve() };
+  const PHOTO_FIELDS = ["fotoAntes", "fotoDepois", "fotoAntes2", "fotoDepois2"];
+  const photos = Object.fromEntries(PHOTO_FIELDS.map((name) => [name, ""]));
+  const photoPromises = Object.fromEntries(
+    PHOTO_FIELDS.map((name) => [name, Promise.resolve()])
+  );
   let savedRecordId = "";
 
   const setNumber = (position) => {
@@ -230,8 +233,7 @@ function createActivityCard(data) {
       fields.ordemServico.value.trim() ||
       fields.responsavel.value.trim() ||
       fields.motivo.value.trim() ||
-      photos.fotoAntes ||
-      photos.fotoDepois
+      PHOTO_FIELDS.some((name) => photos[name])
     );
     const statusText =
       fields.status.value === "em-espera" ? "Em espera" : "Concluída";
@@ -345,8 +347,7 @@ function createActivityCard(data) {
     setSavedRecordId("");
     applyDefaultDates();
     syncMaintenanceType();
-    setPhoto("fotoAntes", "");
-    setPhoto("fotoDepois", "");
+    PHOTO_FIELDS.forEach((name) => setPhoto(name, ""));
     setStatus("concluida");
   };
 
@@ -359,8 +360,9 @@ function createActivityCard(data) {
     fields.motivo.value = activity.motivo || "";
     fields.legendaAntes.value = activity.legendaAntes || "";
     fields.legendaDepois.value = activity.legendaDepois || "";
-    setPhoto("fotoAntes", activity.fotoAntes || "");
-    setPhoto("fotoDepois", activity.fotoDepois || "");
+    fields.legendaAntes2.value = activity.legendaAntes2 || "";
+    fields.legendaDepois2.value = activity.legendaDepois2 || "";
+    PHOTO_FIELDS.forEach((name) => setPhoto(name, activity[name] || ""));
     syncMaintenanceType();
     setStatus(activity.status === "em-espera" ? "em-espera" : "concluida");
     setSavedRecordId(activity.recordId || "");
@@ -377,8 +379,7 @@ function createActivityCard(data) {
       fields.ordemServico.value.trim() ||
       fields.responsavel.value.trim() ||
       fields.motivo.value.trim() ||
-      photos.fotoAntes ||
-      photos.fotoDepois
+      PHOTO_FIELDS.some((name) => photos[name])
     );
     return {
       dataAntes: hasMeaningfulData ? fields.dataAntes.value : "",
@@ -391,8 +392,12 @@ function createActivityCard(data) {
         fields.status.value === "em-espera" ? fields.motivo.value.trim() : "",
       fotoAntes: photos.fotoAntes,
       fotoDepois: photos.fotoDepois,
+      fotoAntes2: photos.fotoAntes2,
+      fotoDepois2: photos.fotoDepois2,
       legendaAntes: fields.legendaAntes.value.trim(),
-      legendaDepois: fields.legendaDepois.value.trim()
+      legendaDepois: fields.legendaDepois.value.trim(),
+      legendaAntes2: fields.legendaAntes2.value.trim(),
+      legendaDepois2: fields.legendaDepois2.value.trim()
     };
   };
 
@@ -421,7 +426,7 @@ function createActivityCard(data) {
     button.addEventListener("click", () => setStatus(button.dataset.status));
   });
 
-  for (const fieldName of ["fotoAntes", "fotoDepois"]) {
+  for (const fieldName of PHOTO_FIELDS) {
     const photoField = fields[fieldName];
     photoField.addEventListener("change", () => {
       const file = photoField.files[0];
@@ -953,6 +958,8 @@ async function collectCurrentRecord() {
         activity.atividade ||
         activity.fotoAntes ||
         activity.fotoDepois ||
+        activity.fotoAntes2 ||
+        activity.fotoDepois2 ||
         activity.ordemServico ||
         activity.responsavel
     );
@@ -1273,12 +1280,7 @@ function recordActivity(activity, index, record = null) {
         <span class="activity-status ${waiting ? "is-waiting" : "is-complete"}">${waiting ? "Em espera" : "Concluída"}</span>
       </div>
       ${activity.motivo ? `<p><strong>Motivo da espera:</strong> ${escapeHtml(activity.motivo)}</p>` : ""}
-      ${activity.fotoAntes || activity.fotoDepois ? `
-        <div class="saved-photos">
-          ${activity.fotoAntes ? `<figure><img src="${escapeAttr(activity.fotoAntes)}" alt="Foto de entrada"><figcaption><strong>Entrada</strong>${activity.legendaAntes ? `<span>${escapeHtml(activity.legendaAntes)}</span>` : ""}</figcaption></figure>` : ""}
-          ${activity.fotoDepois ? `<figure><img src="${escapeAttr(activity.fotoDepois)}" alt="Foto de saída"><figcaption><strong>Saída</strong>${activity.legendaDepois ? `<span>${escapeHtml(activity.legendaDepois)}</span>` : ""}</figcaption></figure>` : ""}
-        </div>
-      ` : ""}
+      ${savedPhotoGallery(activity)}
       ${record ? `
         <div class="saved-activity__actions">
           <button type="button" class="secondary-action" data-record-action="edit-activity" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Editar ocorrência</button>
@@ -1287,6 +1289,35 @@ function recordActivity(activity, index, record = null) {
         </div>
       ` : ""}
     </article>
+  `;
+}
+
+function savedPhotoGallery(activity) {
+  const photos = [
+    { label: "Entrada 1", src: activity.fotoAntes, caption: activity.legendaAntes },
+    { label: "Saída 1", src: activity.fotoDepois, caption: activity.legendaDepois },
+    { label: "Entrada 2", src: activity.fotoAntes2, caption: activity.legendaAntes2 },
+    { label: "Saída 2", src: activity.fotoDepois2, caption: activity.legendaDepois2 }
+  ].filter((photo) => photo.src);
+
+  if (!photos.length) return "";
+
+  return `
+    <div class="saved-photos">
+      ${photos
+        .map(
+          (photo) => `
+            <figure>
+              <img src="${escapeAttr(photo.src)}" alt="${escapeAttr(photo.label)}">
+              <figcaption>
+                <strong>${escapeHtml(photo.label)}</strong>
+                ${photo.caption ? `<span>${escapeHtml(photo.caption)}</span>` : ""}
+              </figcaption>
+            </figure>
+          `
+        )
+        .join("")}
+    </div>
   `;
 }
 
