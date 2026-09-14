@@ -1,15 +1,13 @@
 {
   "name": "sistema-medicao",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "check": "node --check app.js && node --check api/config.js && node --check api/generate.js && node --check api/health.js && node --check lib/report.js"
   },
   "dependencies": {
-    "docx": "^9.7.1",
-    "exceljs": "^4.4.0",
-    "pptxgenjs": "^4.0.1"
+    "pdf-lib": "^1.17.1"
   },
   "engines": {
     "node": "24.x"

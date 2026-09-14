@@ -2148,3 +2148,163 @@ input[readonly] {
     width: 100%;
   }
 }
+
+/* ---------- Nova ocorrência (botão +) ---------- */
+.add-occurrence {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 12px;
+  border: 1px dashed #9db8ce;
+  border-radius: 8px;
+  background: #f7fafc;
+  padding: 14px 16px;
+  color: var(--navy);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.add-occurrence:hover {
+  border-style: solid;
+  border-color: var(--blue, #2f6fa3);
+  background: #eef5fb;
+  box-shadow: 0 8px 18px rgb(22 43 70 / 8%);
+}
+
+.add-occurrence__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.add-occurrence__text {
+  display: grid;
+  gap: 2px;
+}
+
+.add-occurrence__text strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.add-occurrence__text small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---------- Descrição das imagens ---------- */
+.photo-slot {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.photo-caption {
+  display: grid;
+  gap: 4px;
+}
+
+.photo-caption > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.photo-caption textarea {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid #c3d0dc;
+  border-radius: 6px;
+  background: #fff;
+  padding: 8px 10px;
+  color: var(--navy);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.photo-caption textarea:focus {
+  outline: 2px solid #9dc0dd;
+  outline-offset: 1px;
+}
+
+/* ---------- Excluir ocorrência ---------- */
+.remove-activity {
+  min-height: 42px;
+  border: 1px solid var(--red, #b4423f);
+  border-radius: 7px;
+  background: var(--red, #b4423f);
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.remove-activity:hover {
+  filter: brightness(0.94);
+}
+
+/* ---------- Formato fixo em PDF ---------- */
+.export-format-control.is-static {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  min-width: 140px;
+}
+
+.export-format-control.is-static > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.export-format-control.is-static > strong {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* ---------- Legenda das fotos salvas ---------- */
+.saved-photos figcaption {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.saved-photos figcaption strong {
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.saved-photos figcaption span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .add-occurrence {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .remove-activity {
+    width: 100%;
+  }
+}

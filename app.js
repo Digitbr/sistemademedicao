@@ -2,6 +2,8 @@ const DB_NAME = "sistema-medicao-db";
 const DB_VERSION = 1;
 const RECORD_STORE = "records";
 const DEFAULT_CONTRACTOR = "FLASH LOCAÇÃO DE MÃO DE OBRA";
+const REPORT_FORMAT = "pdf";
+const MAX_ACTIVITIES = 20;
 
 const activityContainer = document.querySelector("#activities");
 const activityTemplate = document.querySelector("#activity-template");
@@ -29,7 +31,7 @@ const exportRecordsButton = document.querySelector("#export-records-button");
 const importRecordsButton = document.querySelector("#import-records-button");
 const recordsImportInput = document.querySelector("#records-import-input");
 const reportRecipient = document.querySelector("#report-recipient");
-const reportFormat = document.querySelector("#report-format");
+const addOccurrenceButton = document.querySelector("#add-occurrence");
 const waitingReminders = document.querySelector("#waiting-reminders");
 const waitingReminderList = document.querySelector("#waiting-reminder-list");
 const currentViewTitle = document.querySelector("#current-view-title");
@@ -49,7 +51,7 @@ const state = {
   }
 };
 
-createActivityCards();
+bindAddOccurrence();
 bindNavigation();
 bindDashboardFilters();
 bindRecordFilters();
@@ -130,286 +132,346 @@ function ensureRecipientInput() {
   return input;
 }
 
-function createActivityCards() {
-  for (let index = 0; index < 8; index += 1) {
-    const fragment = activityTemplate.content.cloneNode(true);
-    const card = fragment.querySelector(".activity-card");
-    const header = fragment.querySelector(".activity-card__header");
-    const number = fragment.querySelector(".activity-number");
-    const summary = fragment.querySelector(".activity-summary");
-    const meta = fragment.querySelector(".activity-meta");
-    const statusBadge = fragment.querySelector(".activity-status");
-    const clearButton = fragment.querySelector(".clear-activity");
-    const saveOccurrenceButton = fragment.querySelector("[data-save-occurrence]");
-    const exportOccurrenceButton = fragment.querySelector("[data-export-occurrence]");
-    const occurrenceExportFormat = fragment.querySelector("[data-occurrence-export-format]");
-    const occurrenceSaveStatus = fragment.querySelector("[data-occurrence-save-status]");
-    const waitingReasonField = fragment.querySelector(".waiting-reason-field");
-    const statusButtons = [...fragment.querySelectorAll("[data-status]")];
-    const fields = Object.fromEntries(
-      [...fragment.querySelectorAll("[data-field]")].map((input) => [
-        input.dataset.field,
-        input
-      ])
+function bindAddOccurrence() {
+  addOccurrenceButton?.addEventListener("click", () => {
+    addOccurrenceCard();
+  });
+}
+
+function addOccurrenceCard(data, options = {}) {
+  if (activityCards.length >= MAX_ACTIVITIES) {
+    setFormMessage(
+      `Limite de ${MAX_ACTIVITIES} ocorrências por medição atingido.`,
+      "warning"
     );
-    const photos = { fotoAntes: "", fotoDepois: "" };
-    const photoPromises = { fotoAntes: Promise.resolve(), fotoDepois: Promise.resolve() };
-    let savedRecordId = "";
+    return null;
+  }
 
-    number.textContent = String(index + 1).padStart(2, "0");
-    if (index === 0) card.classList.add("is-open");
+  const entry = createActivityCard(data);
+  if (options.focus !== false) {
+    entry.card.classList.add("is-open");
+    entry.card.scrollIntoView({ behavior: "smooth", block: "center" });
+    entry.fields.atividade.focus({ preventScroll: true });
+  }
+  return entry;
+}
 
-    const updateSummary = () => {
-      const hasContent = Boolean(
-        fields.atividade.value.trim() ||
-        fields.ordemServico.value.trim() ||
-        fields.responsavel.value.trim() ||
-        fields.motivo.value.trim() ||
-        photos.fotoAntes ||
-        photos.fotoDepois
-      );
-      const statusText =
-        fields.status.value === "em-espera" ? "Em espera" : "Concluída";
+function clearOccurrenceCards() {
+  activityCards.length = 0;
+  activityContainer.innerHTML = "";
+}
 
-      const occurrenceOrder = fields.ordemServico.value.trim();
-      summary.textContent =
-        occurrenceOrder || fields.atividade.value.trim() || "Nova ocorrência";
-      meta.textContent = [
-        fields.responsavel.value.trim() || "Sem responsável técnico informado",
-        fields.atividade.value.trim()
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      statusBadge.textContent = hasContent ? statusText : "Pendente";
-      statusBadge.className = `activity-status ${
-        hasContent
-          ? fields.status.value === "em-espera"
-            ? "is-waiting"
-            : "is-complete"
-          : "is-empty"
-      }`;
-      updateProgress();
-      renderFormWaitingReminders();
-    };
+function renumberActivityCards() {
+  activityCards.forEach((entry, index) => entry.setNumber(index + 1));
+}
 
-    const setStatus = (status) => {
-      fields.status.value = status;
-      statusButtons.forEach((button) => {
-        const active = button.dataset.status === status;
-        button.classList.toggle("is-active", active);
-        button.setAttribute("aria-pressed", String(active));
-      });
-      fields.motivo.placeholder =
-        status === "em-espera"
-          ? "Explique por que o problema ficou em espera"
-          : "";
-      fields.motivo.required = status === "em-espera";
-      waitingReasonField.hidden = status !== "em-espera";
-      if (status !== "em-espera") {
-        fields.motivo.value = "";
-      }
-      updateSummary();
-      renderFormWaitingReminders();
-    };
+async function removeOccurrenceCard(entry) {
+  const label =
+    entry.fields.ordemServico.value.trim() ||
+    entry.fields.atividade.value.trim() ||
+    "esta ocorrência";
+  if (!confirm(`Excluir ${label} deste formulário?`)) return;
 
-    const setDefaultEntryDate = (value = currentDateInputValue()) => {
-      fields.dataAntes.value = value || currentDateInputValue();
-    };
+  const savedRecordId = entry.getSavedRecordId();
+  if (
+    savedRecordId &&
+    state.records.some((record) => record.id === savedRecordId) &&
+    confirm("Esta ocorrência também está salva nos registros. Apagar o registro salvo?")
+  ) {
+    await deleteRecord(savedRecordId);
+    state.records = state.records.filter((record) => record.id !== savedRecordId);
+    if (state.editingRecordId === savedRecordId) state.editingRecordId = null;
+  }
 
-    const applyDefaultDates = () => {
-      const today = currentDateInputValue();
-      if (!fields.dataAntes.value) setDefaultEntryDate(today);
-      if (!fields.dataDepois.value) fields.dataDepois.value = today;
-    };
+  entry.card.remove();
+  const position = activityCards.indexOf(entry);
+  if (position >= 0) activityCards.splice(position, 1);
+  if (!activityCards.length) addOccurrenceCard(undefined, { focus: false });
 
-    const syncMaintenanceType = (type = currentMaintenanceType()) => {
-      const normalizedType = normalizeText(type);
-      if (normalizedType.includes("corretiva")) {
-        fields.atividade.placeholder =
-          "Ex.: Consertar caixa d'água, corrigir vazamento ou substituir componente danificado";
-      } else if (normalizedType.includes("preventiva")) {
-        fields.atividade.placeholder =
-          "Ex.: Inspecionar, limpar, ajustar ou prevenir falha no equipamento";
-      } else if (normalizedType.includes("emergencial")) {
-        fields.atividade.placeholder =
-          "Ex.: Atender ocorrência emergencial e registrar a solução aplicada";
-      } else {
-        fields.atividade.placeholder =
-          "Descreva o problema, serviço realizado ou ponto inspecionado";
-      }
-    };
+  renumberActivityCards();
+  updateProgress();
+  renderFormWaitingReminders();
+  renderAllDataViews();
+  setFormMessage("Ocorrência excluída.", "success");
+}
 
-    const setPhoto = (fieldName, dataUrl) => {
-      photos[fieldName] = dataUrl || "";
-      const input = fields[fieldName];
-      const label = input.closest(".photo-input");
-      const preview = label.querySelector("img");
-      input.value = "";
-      if (photos[fieldName]) {
-        preview.src = photos[fieldName];
-        label.classList.add("has-image");
-      } else {
-        preview.removeAttribute("src");
-        label.classList.remove("has-image");
-      }
-    };
+function createActivityCard(data) {
+  const fragment = activityTemplate.content.cloneNode(true);
+  const card = fragment.querySelector(".activity-card");
+  const header = fragment.querySelector(".activity-card__header");
+  const number = fragment.querySelector(".activity-number");
+  const summary = fragment.querySelector(".activity-summary");
+  const meta = fragment.querySelector(".activity-meta");
+  const statusBadge = fragment.querySelector(".activity-status");
+  const clearButton = fragment.querySelector(".clear-activity");
+  const removeButton = fragment.querySelector("[data-remove-occurrence]");
+  const saveOccurrenceButton = fragment.querySelector("[data-save-occurrence]");
+  const exportOccurrenceButton = fragment.querySelector("[data-export-occurrence]");
+  const occurrenceSaveStatus = fragment.querySelector("[data-occurrence-save-status]");
+  const waitingReasonField = fragment.querySelector(".waiting-reason-field");
+  const statusButtons = [...fragment.querySelectorAll("[data-status]")];
+  const fields = Object.fromEntries(
+    [...fragment.querySelectorAll("[data-field]")].map((input) => [
+      input.dataset.field,
+      input
+    ])
+  );
+  const photos = { fotoAntes: "", fotoDepois: "" };
+  const photoPromises = { fotoAntes: Promise.resolve(), fotoDepois: Promise.resolve() };
+  let savedRecordId = "";
 
-    const reset = () => {
-      for (const field of Object.values(fields)) {
-        field.value = field.dataset.field === "status" ? "concluida" : "";
-      }
-      savedRecordId = "";
-      if (occurrenceSaveStatus) {
-        occurrenceSaveStatus.textContent = "Ocorrência ainda não salva individualmente.";
-      }
-      if (saveOccurrenceButton) saveOccurrenceButton.textContent = "Salvar ocorrência";
-      if (exportOccurrenceButton) exportOccurrenceButton.textContent = "Exportar ocorrência";
-      applyDefaultDates();
-      syncMaintenanceType();
-      setPhoto("fotoAntes", "");
-      setPhoto("fotoDepois", "");
-      setStatus("concluida");
-      card.classList.toggle("is-open", index === 0);
-    };
+  const setNumber = (position) => {
+    number.textContent = String(position).padStart(2, "0");
+  };
 
-    const setData = (activity = {}) => {
-      setDefaultEntryDate(activity.dataAntes || currentDateInputValue());
-      fields.dataDepois.value = activity.dataDepois || "";
-      fields.ordemServico.value = activity.ordemServico || activity.os || "";
-      savedRecordId = activity.recordId || "";
-      if (occurrenceSaveStatus) {
-        occurrenceSaveStatus.textContent = savedRecordId
-          ? "Ocorrência carregada para atualização individual."
-          : "Ocorrência ainda não salva individualmente.";
-      }
-      if (saveOccurrenceButton) {
-        saveOccurrenceButton.textContent = savedRecordId
-          ? "Atualizar ocorrência"
-          : "Salvar ocorrência";
-      }
-      if (exportOccurrenceButton) {
-        exportOccurrenceButton.textContent = savedRecordId
-          ? "Exportar ocorrência"
-          : "Salvar e exportar";
-      }
-      fields.responsavel.value = activity.responsavel || "";
-      fields.atividade.value = activity.atividade || "";
-      fields.motivo.value = activity.motivo || "";
-      setPhoto("fotoAntes", activity.fotoAntes || "");
-      setPhoto("fotoDepois", activity.fotoDepois || "");
-      syncMaintenanceType();
-      setStatus(activity.status === "em-espera" ? "em-espera" : "concluida");
-    };
+  const updateSummary = () => {
+    const hasContent = Boolean(
+      fields.atividade.value.trim() ||
+      fields.ordemServico.value.trim() ||
+      fields.responsavel.value.trim() ||
+      fields.motivo.value.trim() ||
+      photos.fotoAntes ||
+      photos.fotoDepois
+    );
+    const statusText =
+      fields.status.value === "em-espera" ? "Em espera" : "Concluída";
 
-    const getData = async () => {
-      await Promise.all(Object.values(photoPromises));
-      const hasMeaningfulData = Boolean(
-        fields.atividade.value.trim() ||
-        fields.ordemServico.value.trim() ||
-        fields.responsavel.value.trim() ||
-        fields.motivo.value.trim() ||
-        photos.fotoAntes ||
-        photos.fotoDepois
-      );
-      return {
-        dataAntes: hasMeaningfulData ? fields.dataAntes.value : "",
-        dataDepois: hasMeaningfulData ? fields.dataDepois.value : "",
-        ordemServico: hasMeaningfulData ? fields.ordemServico.value.trim() : "",
-        responsavel: fields.responsavel.value.trim(),
-        atividade: fields.atividade.value.trim(),
-        status: fields.status.value,
-        motivo:
-          fields.status.value === "em-espera" ? fields.motivo.value.trim() : "",
-        fotoAntes: photos.fotoAntes,
-        fotoDepois: photos.fotoDepois
-      };
-    };
+    const occurrenceOrder = fields.ordemServico.value.trim();
+    summary.textContent =
+      occurrenceOrder || fields.atividade.value.trim() || "Nova ocorrência";
+    meta.textContent = [
+      fields.responsavel.value.trim() || "Sem responsável técnico informado",
+      fields.atividade.value.trim()
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    statusBadge.textContent = hasContent ? statusText : "Pendente";
+    statusBadge.className = `activity-status ${
+      hasContent
+        ? fields.status.value === "em-espera"
+          ? "is-waiting"
+          : "is-complete"
+        : "is-empty"
+    }`;
+    updateProgress();
+    renderFormWaitingReminders();
+  };
 
-    header.addEventListener("click", () => {
-      card.classList.toggle("is-open");
-    });
-
-    for (const field of [
-      fields.dataAntes,
-      fields.dataDepois,
-      fields.ordemServico,
-      fields.responsavel,
-      fields.atividade,
-      fields.motivo
-    ]) {
-      field.addEventListener("input", updateSummary);
-      field.addEventListener("change", updateSummary);
-    }
-
-    fields.dataAntes.addEventListener("change", renderFormWaitingReminders);
-
-    fields.atividade.addEventListener("input", applyDefaultDates);
-    fields.responsavel.addEventListener("input", applyDefaultDates);
-
+  const setStatus = (status) => {
+    fields.status.value = status;
     statusButtons.forEach((button) => {
-      button.addEventListener("click", () => setStatus(button.dataset.status));
+      const active = button.dataset.status === status;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
     });
-
-    for (const fieldName of ["fotoAntes", "fotoDepois"]) {
-      const photoField = fields[fieldName];
-      photoField.addEventListener("change", () => {
-        const file = photoField.files[0];
-        if (!file) {
-          setPhoto(fieldName, "");
-          return;
-        }
-        applyDefaultDates();
-        photoPromises[fieldName] = fileToDataUrl(file)
-          .then((dataUrl) => setPhoto(fieldName, dataUrl))
-          .catch((error) => {
-            setFormMessage(error.message, "error");
-            setPhoto(fieldName, "");
-          });
-      });
+    fields.motivo.placeholder =
+      status === "em-espera"
+        ? "Explique por que o problema ficou em espera"
+        : "";
+    fields.motivo.required = status === "em-espera";
+    waitingReasonField.hidden = status !== "em-espera";
+    if (status !== "em-espera") {
+      fields.motivo.value = "";
     }
+    updateSummary();
+    renderFormWaitingReminders();
+  };
 
-    clearButton.addEventListener("click", reset);
-    saveOccurrenceButton?.addEventListener("click", () => saveOccurrenceFromCard(index));
-    exportOccurrenceButton?.addEventListener("click", () =>
-      exportOccurrenceFromCard(
-        index,
-        exportOccurrenceButton,
-        occurrenceExportFormat?.value || reportFormat.value
-      )
+  const setDefaultEntryDate = (value = currentDateInputValue()) => {
+    fields.dataAntes.value = value || currentDateInputValue();
+  };
+
+  const applyDefaultDates = () => {
+    const today = currentDateInputValue();
+    if (!fields.dataAntes.value) setDefaultEntryDate(today);
+    if (!fields.dataDepois.value) fields.dataDepois.value = today;
+  };
+
+  const syncMaintenanceType = (type = currentMaintenanceType()) => {
+    const normalizedType = normalizeText(type);
+    if (normalizedType.includes("corretiva")) {
+      fields.atividade.placeholder =
+        "Ex.: Consertar caixa d'água, corrigir vazamento ou substituir componente danificado";
+    } else if (normalizedType.includes("preventiva")) {
+      fields.atividade.placeholder =
+        "Ex.: Inspecionar, limpar, ajustar ou prevenir falha no equipamento";
+    } else if (normalizedType.includes("emergencial")) {
+      fields.atividade.placeholder =
+        "Ex.: Atender ocorrência emergencial e registrar a solução aplicada";
+    } else {
+      fields.atividade.placeholder =
+        "Descreva o problema, serviço realizado ou ponto inspecionado";
+    }
+  };
+
+  const setPhoto = (fieldName, dataUrl) => {
+    photos[fieldName] = dataUrl || "";
+    const input = fields[fieldName];
+    const label = input.closest(".photo-input");
+    const preview = label.querySelector("img");
+    input.value = "";
+    if (photos[fieldName]) {
+      preview.src = photos[fieldName];
+      label.classList.add("has-image");
+    } else {
+      preview.removeAttribute("src");
+      label.classList.remove("has-image");
+    }
+  };
+
+  const setSavedRecordId = (id) => {
+    savedRecordId = id || "";
+    if (occurrenceSaveStatus) {
+      occurrenceSaveStatus.textContent = savedRecordId
+        ? "Ocorrência salva individualmente. Alterações futuras poderão atualizar este registro."
+        : "Ocorrência ainda não salva individualmente.";
+    }
+    if (saveOccurrenceButton) {
+      saveOccurrenceButton.textContent = savedRecordId
+        ? "Atualizar ocorrência"
+        : "Salvar ocorrência";
+    }
+    if (exportOccurrenceButton) {
+      exportOccurrenceButton.textContent = savedRecordId
+        ? "Exportar PDF"
+        : "Salvar e exportar PDF";
+    }
+  };
+
+  const reset = () => {
+    for (const field of Object.values(fields)) {
+      field.value = field.dataset.field === "status" ? "concluida" : "";
+    }
+    setSavedRecordId("");
+    applyDefaultDates();
+    syncMaintenanceType();
+    setPhoto("fotoAntes", "");
+    setPhoto("fotoDepois", "");
+    setStatus("concluida");
+  };
+
+  const setData = (activity = {}) => {
+    setDefaultEntryDate(activity.dataAntes || currentDateInputValue());
+    fields.dataDepois.value = activity.dataDepois || "";
+    fields.ordemServico.value = activity.ordemServico || activity.os || "";
+    fields.responsavel.value = activity.responsavel || "";
+    fields.atividade.value = activity.atividade || "";
+    fields.motivo.value = activity.motivo || "";
+    fields.legendaAntes.value = activity.legendaAntes || "";
+    fields.legendaDepois.value = activity.legendaDepois || "";
+    setPhoto("fotoAntes", activity.fotoAntes || "");
+    setPhoto("fotoDepois", activity.fotoDepois || "");
+    syncMaintenanceType();
+    setStatus(activity.status === "em-espera" ? "em-espera" : "concluida");
+    setSavedRecordId(activity.recordId || "");
+    if (savedRecordId && occurrenceSaveStatus) {
+      occurrenceSaveStatus.textContent =
+        "Ocorrência carregada para atualização individual.";
+    }
+  };
+
+  const getData = async () => {
+    await Promise.all(Object.values(photoPromises));
+    const hasMeaningfulData = Boolean(
+      fields.atividade.value.trim() ||
+      fields.ordemServico.value.trim() ||
+      fields.responsavel.value.trim() ||
+      fields.motivo.value.trim() ||
+      photos.fotoAntes ||
+      photos.fotoDepois
     );
+    return {
+      dataAntes: hasMeaningfulData ? fields.dataAntes.value : "",
+      dataDepois: hasMeaningfulData ? fields.dataDepois.value : "",
+      ordemServico: hasMeaningfulData ? fields.ordemServico.value.trim() : "",
+      responsavel: fields.responsavel.value.trim(),
+      atividade: fields.atividade.value.trim(),
+      status: fields.status.value,
+      motivo:
+        fields.status.value === "em-espera" ? fields.motivo.value.trim() : "",
+      fotoAntes: photos.fotoAntes,
+      fotoDepois: photos.fotoDepois,
+      legendaAntes: fields.legendaAntes.value.trim(),
+      legendaDepois: fields.legendaDepois.value.trim()
+    };
+  };
 
-    activityContainer.append(fragment);
-    activityCards.push({
-      card,
-      fields,
-      getData,
-      reset,
-      setData,
-      syncMaintenanceType,
-      updateSummary,
-      getSavedRecordId: () => savedRecordId,
-      setSavedRecordId: (id) => {
-        savedRecordId = id || "";
-        if (occurrenceSaveStatus) {
-          occurrenceSaveStatus.textContent = savedRecordId
-            ? "Ocorrência salva individualmente. Alterações futuras poderão atualizar este registro."
-            : "Ocorrência ainda não salva individualmente.";
-        }
-        if (saveOccurrenceButton) {
-          saveOccurrenceButton.textContent = savedRecordId
-            ? "Atualizar ocorrência"
-            : "Salvar ocorrência";
-        }
-        if (exportOccurrenceButton) {
-          exportOccurrenceButton.textContent = savedRecordId
-            ? "Exportar ocorrência"
-            : "Salvar e exportar";
-        }
+  header.addEventListener("click", () => {
+    card.classList.toggle("is-open");
+  });
+
+  for (const field of [
+    fields.dataAntes,
+    fields.dataDepois,
+    fields.ordemServico,
+    fields.responsavel,
+    fields.atividade,
+    fields.motivo
+  ]) {
+    field.addEventListener("input", updateSummary);
+    field.addEventListener("change", updateSummary);
+  }
+
+  fields.dataAntes.addEventListener("change", renderFormWaitingReminders);
+
+  fields.atividade.addEventListener("input", applyDefaultDates);
+  fields.responsavel.addEventListener("input", applyDefaultDates);
+
+  statusButtons.forEach((button) => {
+    button.addEventListener("click", () => setStatus(button.dataset.status));
+  });
+
+  for (const fieldName of ["fotoAntes", "fotoDepois"]) {
+    const photoField = fields[fieldName];
+    photoField.addEventListener("change", () => {
+      const file = photoField.files[0];
+      if (!file) {
+        setPhoto(fieldName, "");
+        return;
       }
+      applyDefaultDates();
+      photoPromises[fieldName] = fileToDataUrl(file)
+        .then((dataUrl) => setPhoto(fieldName, dataUrl))
+        .catch((error) => {
+          setFormMessage(error.message, "error");
+          setPhoto(fieldName, "");
+        });
     });
   }
 
+  const entry = {
+    card,
+    fields,
+    getData,
+    reset,
+    setData,
+    setNumber,
+    syncMaintenanceType,
+    updateSummary,
+    getSavedRecordId: () => savedRecordId,
+    setSavedRecordId
+  };
+
+  clearButton.addEventListener("click", () => {
+    reset();
+    updateSummary();
+  });
+  removeButton?.addEventListener("click", () => removeOccurrenceCard(entry));
+  saveOccurrenceButton?.addEventListener("click", () => saveOccurrenceFromCard(entry));
+  exportOccurrenceButton?.addEventListener("click", () =>
+    exportOccurrenceFromCard(entry, exportOccurrenceButton)
+  );
+
+  activityContainer.append(fragment);
+  activityCards.push(entry);
+  renumberActivityCards();
+
+  if (data) setData(data);
+  else reset();
+
   updateProgress();
+  refreshIcons();
+  return entry;
 }
 
 function bindNavigation() {
@@ -458,8 +520,6 @@ function bindRecordFilters() {
 }
 
 function bindRecordActions() {
-  reportFormat.addEventListener("change", updateGenerateButton);
-
   saveRecordButton.addEventListener("click", async () => {
     await saveCurrentRecord();
   });
@@ -491,20 +551,29 @@ function bindRecordActions() {
       return;
     }
 
+    if (action === "edit-activity") {
+      const activityIndex = Number(button.dataset.activityIndex);
+      loadRecordIntoForm(record, { openActivityIndex: activityIndex });
+      setView("report");
+      return;
+    }
+
+    if (action === "delete-activity") {
+      const activityIndex = Number(button.dataset.activityIndex);
+      await deleteActivityFromRecord(record, activityIndex);
+      return;
+    }
+
     if (action === "export-activity") {
       const activityIndex = Number(button.dataset.activityIndex);
       const activity = filledActivities(record)[activityIndex];
       if (!activity) return;
-      await exportSavedActivity(record, activity, button, button.dataset.recordFormat || "excel");
+      await exportSavedActivity(record, activity, button);
       return;
     }
 
     if (action === "export") {
-      await exportSavedRecord(
-        record,
-        button,
-        button.dataset.recordFormat || "excel"
-      );
+      await exportSavedRecord(record, button);
     }
   });
 
@@ -652,17 +721,19 @@ function resetForm() {
   reportForm.elements.contratada.value = DEFAULT_CONTRACTOR;
   reportForm.elements.tipoManutencao.value = "Preventiva";
   state.editingRecordId = null;
-  activityCards.forEach((activity) => activity.reset());
+  clearOccurrenceCards();
+  addOccurrenceCard(undefined, { focus: false });
+  activityCards[0]?.card.classList.add("is-open");
   syncMaintenanceCards();
   renderFormWaitingReminders();
   reportPageTitle.textContent = "Nova medição de serviço";
   reportPageDescription.textContent =
     "Preencha os dados, registre o problema, adicione as fotos de entrada e saída e gere o relatório.";
   saveRecordButton.textContent = "Salvar medição";
-  setFormMessage("Salve a medição ou escolha um formato para gerar o relatório.");
+  setFormMessage("Salve a medição ou gere o relatório em PDF.");
 }
 
-function loadRecordIntoForm(record) {
+function loadRecordIntoForm(record, options = {}) {
   resetForm();
   state.editingRecordId = record.id;
   reportForm.elements.competencia.value = record.metadata.competencia || "";
@@ -671,19 +742,35 @@ function loadRecordIntoForm(record) {
     record.metadata.contratada || DEFAULT_CONTRACTOR;
   reportForm.elements.tipoManutencao.value =
     record.metadata.tipoManutencao || "";
-  syncMaintenanceCards();
-  activityCards.forEach((activity, index) => {
-    const activityData = record.activities[index];
-    activity.setData(
-      activityData
-        ? {
-            ...activityData,
-            ordemServico: activityData.ordemServico || record.metadata.ordemServico || "",
-            recordId: index === 0 ? record.id : ""
-          }
-        : undefined
+  clearOccurrenceCards();
+  const activities = filledActivities(record);
+  const list = activities.length ? activities : [{}];
+  list.forEach((activityData) => {
+    addOccurrenceCard(
+      {
+        ...activityData,
+        ordemServico:
+          activityData.ordemServico || record.metadata.ordemServico || "",
+        recordId: list.length === 1 ? record.id : ""
+      },
+      { focus: false }
     );
   });
+  syncMaintenanceCards();
+  const openIndex = Number.isInteger(options.openActivityIndex)
+    ? Math.min(Math.max(options.openActivityIndex, 0), activityCards.length - 1)
+    : 0;
+  activityCards.forEach((entry, index) =>
+    entry.card.classList.toggle("is-open", index === openIndex)
+  );
+  if (options.openActivityIndex !== undefined) {
+    requestAnimationFrame(() => {
+      activityCards[openIndex]?.card.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+    });
+  }
   reportPageTitle.textContent = `Editar ${recordLabel(record)}`;
   reportPageDescription.textContent =
     "Atualize os dados e salve para manter o histórico sincronizado.";
@@ -692,8 +779,7 @@ function loadRecordIntoForm(record) {
 }
 
 
-async function saveOccurrenceFromCard(index) {
-  const activityCard = activityCards[index];
+async function saveOccurrenceFromCard(activityCard) {
   if (!activityCard) return null;
 
   const requiredFields = [
@@ -767,25 +853,63 @@ async function saveOccurrenceFromCard(index) {
   return record;
 }
 
-async function exportOccurrenceFromCard(index, button, format = "excel") {
-  if (!button) return;
+async function exportOccurrenceFromCard(activityCard, button) {
+  if (!button || !activityCard) return;
   button.disabled = true;
   const originalText = button.textContent;
   button.textContent = "Preparando...";
 
   try {
-    const record = await saveOccurrenceFromCard(index);
+    const record = await saveOccurrenceFromCard(activityCard);
     if (!record) return;
     button.textContent = "Exportando...";
-    await exportSavedRecord(record, button, format, {
-      successMessage: `${reportFormatLabel(format)} individual da ocorrência baixado com sucesso.`
+    await exportSavedRecord(record, button, REPORT_FORMAT, {
+      successMessage: "PDF individual da ocorrência baixado com sucesso."
     });
   } finally {
     button.disabled = false;
-    button.textContent = activityCards[index]?.getSavedRecordId()
-      ? "Exportar ocorrência"
-      : originalText || "Exportar ocorrência";
+    button.textContent = activityCard.getSavedRecordId()
+      ? "Exportar PDF"
+      : originalText || "Exportar PDF";
   }
+}
+
+async function deleteActivityFromRecord(record, activityIndex) {
+  const activities = filledActivities(record);
+  const target = activities[activityIndex];
+  if (!target) return;
+
+  if (
+    !confirm(
+      `Excluir a ocorrência ${String(activityIndex + 1).padStart(2, "0")} de ${recordLabel(
+        record
+      )}?`
+    )
+  ) {
+    return;
+  }
+
+  const remaining = (record.activities || []).filter((item) => item !== target);
+  const stillFilled = remaining.filter((item) =>
+    String(item?.atividade || "").trim()
+  );
+
+  if (!stillFilled.length) {
+    await deleteRecord(record.id);
+    state.records = state.records.filter((item) => item.id !== record.id);
+    if (state.editingRecordId === record.id) resetForm();
+    renderAllDataViews();
+    return;
+  }
+
+  record.activities = remaining;
+  record.updatedAt = new Date().toISOString();
+  await putRecord(record);
+  upsertStateRecord(record);
+  if (state.editingRecordId === record.id) {
+    loadRecordIntoForm(state.records.find((item) => item.id === record.id));
+  }
+  renderAllDataViews();
 }
 
 async function saveCurrentRecord(options = {}) {
@@ -821,8 +945,16 @@ async function collectCurrentRecord() {
 
   try {
     const formData = new FormData(reportForm);
-    const activities = await Promise.all(
+    const collected = await Promise.all(
       activityCards.map((activity) => activity.getData())
+    );
+    const activities = collected.filter(
+      (activity) =>
+        activity.atividade ||
+        activity.fotoAntes ||
+        activity.fotoDepois ||
+        activity.ordemServico ||
+        activity.responsavel
     );
     const firstActivityOrder = activities.find((activity) => activity.ordemServico)?.ordemServico || "";
     const existing = state.records.find(
@@ -852,10 +984,10 @@ reportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const record = await saveCurrentRecord({ silent: true });
   if (!record) return;
-  await exportSavedRecord(record, generateButton, reportFormat.value);
+  await exportSavedRecord(record, generateButton, REPORT_FORMAT);
 });
 
-async function exportSavedActivity(parentRecord, activity, button, format = "excel") {
+async function exportSavedActivity(parentRecord, activity, button, format = REPORT_FORMAT) {
   const order = String(activity.ordemServico || parentRecord.metadata?.ordemServico || "").trim();
   const now = new Date().toISOString();
   const existing = state.records.find(
@@ -884,11 +1016,11 @@ async function exportSavedActivity(parentRecord, activity, button, format = "exc
   await putRecord(individualRecord);
   upsertStateRecord(individualRecord);
   await exportSavedRecord(individualRecord, button, format, {
-    successMessage: `${reportFormatLabel(format)} individual da ocorrência baixado com sucesso.`
+    successMessage: "PDF individual da ocorrência baixado com sucesso."
   });
 }
 
-async function exportSavedRecord(record, button, format = "excel", options = {}) {
+async function exportSavedRecord(record, button, format = REPORT_FORMAT, options = {}) {
   const formatLabel = reportFormatLabel(format);
   button.disabled = true;
   setFormMessage(`Gerando ${formatLabel} e preparando a exportação...`);
@@ -1118,11 +1250,9 @@ function recordBox(record) {
         <div class="record-actions">
           <span>${completed} concluída(s) · ${waiting} em espera</span>
           <div>
-            <button type="button" class="secondary-action" data-record-action="edit" data-record-id="${escapeAttr(record.id)}">Editar</button>
-            <button type="button" class="secondary-action" data-record-action="export" data-record-format="excel" data-record-id="${escapeAttr(record.id)}">Excel</button>
-            <button type="button" class="secondary-action" data-record-action="export" data-record-format="word" data-record-id="${escapeAttr(record.id)}">Word</button>
-            <button type="button" class="secondary-action" data-record-action="export" data-record-format="presentation" data-record-id="${escapeAttr(record.id)}">PowerPoint</button>
-            <button type="button" class="danger-action" data-record-action="delete" data-record-id="${escapeAttr(record.id)}">Apagar</button>
+            <button type="button" class="secondary-action" data-record-action="edit" data-record-id="${escapeAttr(record.id)}">Editar medição</button>
+            <button type="button" class="secondary-action" data-record-action="export" data-record-id="${escapeAttr(record.id)}">Baixar PDF</button>
+            <button type="button" class="danger-action" data-record-action="delete" data-record-id="${escapeAttr(record.id)}">Apagar medição</button>
           </div>
         </div>
       </div>
@@ -1145,16 +1275,15 @@ function recordActivity(activity, index, record = null) {
       ${activity.motivo ? `<p><strong>Motivo da espera:</strong> ${escapeHtml(activity.motivo)}</p>` : ""}
       ${activity.fotoAntes || activity.fotoDepois ? `
         <div class="saved-photos">
-          ${activity.fotoAntes ? `<figure><img src="${escapeAttr(activity.fotoAntes)}" alt="Foto de entrada"><figcaption>Entrada</figcaption></figure>` : ""}
-          ${activity.fotoDepois ? `<figure><img src="${escapeAttr(activity.fotoDepois)}" alt="Foto de saída"><figcaption>Saída</figcaption></figure>` : ""}
+          ${activity.fotoAntes ? `<figure><img src="${escapeAttr(activity.fotoAntes)}" alt="Foto de entrada"><figcaption><strong>Entrada</strong>${activity.legendaAntes ? `<span>${escapeHtml(activity.legendaAntes)}</span>` : ""}</figcaption></figure>` : ""}
+          ${activity.fotoDepois ? `<figure><img src="${escapeAttr(activity.fotoDepois)}" alt="Foto de saída"><figcaption><strong>Saída</strong>${activity.legendaDepois ? `<span>${escapeHtml(activity.legendaDepois)}</span>` : ""}</figcaption></figure>` : ""}
         </div>
       ` : ""}
       ${record ? `
         <div class="saved-activity__actions">
-          <span>Exportação individual:</span>
-          <button type="button" class="secondary-action" data-record-action="export-activity" data-record-format="excel" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Excel</button>
-          <button type="button" class="secondary-action" data-record-action="export-activity" data-record-format="word" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Word</button>
-          <button type="button" class="secondary-action" data-record-action="export-activity" data-record-format="presentation" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">PowerPoint</button>
+          <button type="button" class="secondary-action" data-record-action="edit-activity" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Editar ocorrência</button>
+          <button type="button" class="secondary-action" data-record-action="export-activity" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Baixar PDF</button>
+          <button type="button" class="danger-action" data-record-action="delete-activity" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Excluir ocorrência</button>
         </div>
       ` : ""}
     </article>
@@ -1488,7 +1617,9 @@ function updateProgress() {
   const total = activityCards.filter(({ fields }) =>
     fields.atividade.value.trim()
   ).length;
-  activityProgress.textContent = `${total} de 8`;
+  activityProgress.textContent = `${total} ${
+    total === 1 ? "ocorrência" : "ocorrências"
+  }`;
 }
 
 async function fileToDataUrl(file) {
@@ -1651,21 +1782,15 @@ function formatActivityDates(activity) {
 function filenameFromResponse(response) {
   const disposition = response.headers.get("Content-Disposition") || "";
   const match = disposition.match(/filename="([^"]+)"/i);
-  return match?.[1] || "Relatório Fotográfico.xlsx";
+  return match?.[1] || "Relatorio Fotografico.pdf";
 }
 
-function reportFormatLabel(format) {
-  return {
-    excel: "Excel",
-    word: "Word",
-    presentation: "PowerPoint"
-  }[format] || "relatório";
+function reportFormatLabel() {
+  return "PDF";
 }
 
 function updateGenerateButton() {
-  generateButton.textContent = `Salvar e gerar ${reportFormatLabel(
-    reportFormat.value
-  )}`;
+  generateButton.textContent = "Salvar e gerar PDF";
 }
 
 function setFormMessage(message, type = "") {

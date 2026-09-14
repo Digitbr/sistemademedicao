@@ -8,7 +8,7 @@
       content="Geração e envio de relatórios fotográficos de manutenção."
     />
     <title>Sistema de Medição | Relatório Fotográfico</title>
-    <link rel="stylesheet" href="/styles.css?v=20260702-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260914-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -125,8 +125,8 @@
             </p>
           </div>
           <div class="progress-summary">
-            <strong id="activity-progress">0 de 8</strong>
-            <span>atividades preenchidas</span>
+            <strong id="activity-progress">0 ocorrências</strong>
+            <span>registradas nesta medição</span>
           </div>
         </div>
 
@@ -187,18 +187,17 @@
               <span class="step">02</span>
               <div>
                 <h2>Ocorrências, OS e evidências</h2>
-                <p>Registre até oito ocorrências. Cada ocorrência pode ter uma OS própria, ser salva e atualizada individualmente.</p>
+                <p>Adicione uma ocorrência por vez. Cada ocorrência pode ter uma OS própria, ser salva, editada ou excluída individualmente.</p>
               </div>
-            </div>
-            <div class="occurrence-area-header">
-              <div>
-                <span class="email-label">Cabeçalho da área de ocorrências</span>
-                <strong>Controle individual por ocorrência</strong>
-                <p>Quando a imagem definitiva do cabeçalho for adicionada ao projeto, ela poderá ficar fixa nesta área.</p>
-              </div>
-              <span class="activity-status is-complete">OS individual</span>
             </div>
             <div id="activities" class="activities"></div>
+            <button type="button" class="add-occurrence" id="add-occurrence">
+              <span class="add-occurrence__icon" aria-hidden="true">+</span>
+              <span class="add-occurrence__text">
+                <strong>Nova ocorrência</strong>
+                <small>Adicionar mais uma ocorrência a esta medição</small>
+              </span>
+            </button>
           </section>
 
           <section class="waiting-reminders" id="waiting-reminders" hidden>
@@ -217,18 +216,14 @@
               <span class="email-label">Destino da exportação</span>
               <strong id="report-recipient">comercial1@primecsg.com.br</strong>
               <p id="form-status" role="status">
-                Salve a medição ou escolha um formato para gerar o relatório.
+                Salve a medição ou gere o relatório em PDF.
               </p>
             </div>
             <div class="submit-actions">
-              <label class="export-format-control">
+              <span class="export-format-control is-static">
                 <span>Formato do relatório</span>
-                <select id="report-format" aria-label="Formato do relatório">
-                  <option value="excel">Excel (.xlsx)</option>
-                  <option value="word">Word (.docx)</option>
-                  <option value="presentation">PowerPoint (.pptx)</option>
-                </select>
-              </label>
+                <strong>PDF (.pdf)</strong>
+              </span>
               <button type="button" class="secondary-action" id="reset-record-button">
                 Limpar formulário
               </button>
@@ -236,7 +231,7 @@
                 Salvar medição
               </button>
               <button type="submit" id="generate-button">
-                Salvar, gerar e enviar
+                Salvar e gerar PDF
               </button>
             </div>
           </section>
@@ -377,26 +372,48 @@
           </div>
 
           <div class="photo-grid">
-            <label class="photo-input is-entry">
-              <span class="photo-input__label">Foto de entrada</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                data-field="fotoAntes"
-              />
-              <span class="photo-input__action">Selecionar imagem</span>
-              <img alt="Prévia da foto de entrada" />
-            </label>
-            <label class="photo-input is-exit">
-              <span class="photo-input__label">Foto de saída</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                data-field="fotoDepois"
-              />
-              <span class="photo-input__action">Selecionar imagem</span>
-              <img alt="Prévia da foto de saída" />
-            </label>
+            <div class="photo-slot">
+              <label class="photo-input is-entry">
+                <span class="photo-input__label">Foto de entrada</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  data-field="fotoAntes"
+                />
+                <span class="photo-input__action">Selecionar imagem</span>
+                <img alt="Prévia da foto de entrada" />
+              </label>
+              <label class="photo-caption">
+                <span>Descrição da imagem de entrada</span>
+                <textarea
+                  data-field="legendaAntes"
+                  rows="2"
+                  maxlength="300"
+                  placeholder="Ex.: Vazamento na conexão de saída do reservatório"
+                ></textarea>
+              </label>
+            </div>
+            <div class="photo-slot">
+              <label class="photo-input is-exit">
+                <span class="photo-input__label">Foto de saída</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  data-field="fotoDepois"
+                />
+                <span class="photo-input__action">Selecionar imagem</span>
+                <img alt="Prévia da foto de saída" />
+              </label>
+              <label class="photo-caption">
+                <span>Descrição da imagem de saída</span>
+                <textarea
+                  data-field="legendaDepois"
+                  rows="2"
+                  maxlength="300"
+                  placeholder="Ex.: Conexão substituída e vedada, sem vazamento"
+                ></textarea>
+              </label>
+            </div>
           </div>
 
           <div class="activity-control">
@@ -428,18 +445,13 @@
                 <button type="button" class="secondary-action" data-save-occurrence>
                   Salvar ocorrência
                 </button>
-                <label class="occurrence-export-control">
-                  <span>Formato</span>
-                  <select data-occurrence-export-format aria-label="Formato da exportação individual">
-                    <option value="excel">Excel</option>
-                    <option value="word">Word</option>
-                    <option value="presentation">PowerPoint</option>
-                  </select>
-                </label>
                 <button type="button" class="secondary-action" data-export-occurrence>
-                  Exportar ocorrência
+                  Exportar PDF
                 </button>
-                <button type="button" class="clear-activity">Limpar atividade</button>
+                <button type="button" class="clear-activity">Limpar campos</button>
+                <button type="button" class="remove-activity" data-remove-occurrence>
+                  Excluir ocorrência
+                </button>
               </div>
             </div>
           </div>
@@ -448,6 +460,6 @@
     </template>
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="/app.js?v=20260702-3"></script>
+    <script src="/app.js?v=20260914-1"></script>
   </body>
 </html>

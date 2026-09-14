@@ -7,9 +7,11 @@ Aplicação web para cadastro, acompanhamento e exportação de medições e rel
 - Dashboard com filtros por período e tipo de manutenção.
 - Visão operacional de pendências, responsáveis e exportações.
 - Registros editáveis, pesquisáveis e organizados em caixas.
+- Ocorrências adicionadas sob demanda pelo botão "+", com edição e exclusão individual.
+- Descrição editável para a foto de entrada e a de saída de cada ocorrência.
 - Backup e restauração do histórico local em JSON.
 - Status de atividades concluídas ou em espera, com motivo obrigatório.
-- Exportação de relatórios em Excel, Word e PowerPoint.
+- Exportação de relatórios em PDF (uma ocorrência por página).
 - Envio opcional do relatório por e-mail usando a Resend.
 
 ## Persistência
@@ -24,7 +26,7 @@ Copie os nomes de `.env.example` para o ambiente da Vercel:
 - `RESEND_API_KEY`: chave da Resend para ativar o envio.
 - `REPORT_FROM_EMAIL`: remetente verificado na Resend.
 
-Sem `RESEND_API_KEY`, o relatório escolhido continua sendo gerado e baixado normalmente.
+Sem `RESEND_API_KEY`, o relatório em PDF continua sendo gerado e baixado normalmente.
 
 ## Executar localmente
 
@@ -42,3 +44,4 @@ npm run check
 ## Produção
 
 https://sistema-medicao-phi.vercel.app/
+
