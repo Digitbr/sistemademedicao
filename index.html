@@ -236,9 +236,20 @@
               <button type="button" class="secondary-action" id="save-record-button">
                 Salvar medição
               </button>
-              <button type="submit" id="generate-button">
-                Salvar e gerar PDF
-              </button>
+              <div class="actions-container">
+  <!-- Esse é o seu botão original de PDF -->
+  <button type="submit" id="generate-button" class="primary-action">
+    Salvar e gerar PDF
+  </button>
+  
+  <!-- Cole estes dois novos botões ao lado -->
+  <button type="submit" id="generate-word-button" class="secondary-action">
+    Exportar Word
+  </button>
+  <button type="submit" id="generate-pptx-button" class="secondary-action">
+    Exportar PowerPoint
+  </button>
+</div>
             </div>
           </section>
         </form>
