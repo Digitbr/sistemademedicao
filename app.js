@@ -1029,6 +1029,32 @@ reportForm.addEventListener("submit", async (event) => {
   
   const photoWarning = photoErrorSummary();
   if (photoWarning) setFormMessage(`Relatório gerado, mas ${photoWarning}`, "warning");
+  reportForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  
+  const submitter = event.submitter;
+  let format = "pdf";
+  let targetButton = generateButton;
+
+  if (submitter?.id === "generate-pptx-button") {
+    format = "pptx";
+    targetButton = generatePptxButton;
+  } else if (submitter?.id === "generate-word-button") {
+    format = "docx";
+    targetButton = generateWordButton;
+  } else if (submitter?.id === "generate-excel-button") { // ADICIONE ESTAS 3 LINHAS
+    format = "xlsx";
+    targetButton = generateExcelButton;
+  }
+
+  const record = await saveCurrentRecord({ silent: true });
+  if (!record) return;
+  
+  await exportSavedRecord(record, targetButton, format);
+  
+  const photoWarning = photoErrorSummary();
+  if (photoWarning) setFormMessage(`Relatório gerado, mas ${photoWarning}`, "warning");
+});
 });
 // -------------------------------------------------------------
 
