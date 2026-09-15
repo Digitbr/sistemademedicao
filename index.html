@@ -8,7 +8,7 @@
       content="Geração e envio de relatórios fotográficos de manutenção."
     />
     <title>Sistema de Medição | Relatório Fotográfico</title>
-    <link rel="stylesheet" href="/styles.css?v=20260915-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260915-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -70,10 +70,6 @@
             <strong id="current-view-title">Dashboard</strong>
             <span id="current-date"></span>
           </div>
-          <button type="button" class="header-action" data-go-to="report">
-            <i data-lucide="plus" aria-hidden="true"></i>
-            <span>Nova medição</span>
-          </button>
         </header>
 
         <main class="page">
@@ -387,7 +383,7 @@
                 <span class="photo-input__label">Foto de entrada 1</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept="image/*"
                   data-field="fotoAntes"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
@@ -408,7 +404,7 @@
                 <span class="photo-input__label">Foto de saída 1</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept="image/*"
                   data-field="fotoDepois"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
@@ -429,7 +425,7 @@
                 <span class="photo-input__label">Foto de entrada 2</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept="image/*"
                   data-field="fotoAntes2"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
@@ -450,7 +446,7 @@
                 <span class="photo-input__label">Foto de saída 2</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept="image/*"
                   data-field="fotoDepois2"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
@@ -512,6 +508,6 @@
     </template>
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="/app.js?v=20260915-1"></script>
+    <script src="/app.js?v=20260915-2"></script>
   </body>
 </html>

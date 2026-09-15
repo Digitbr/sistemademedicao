@@ -4,6 +4,13 @@ const RECORD_STORE = "records";
 const DEFAULT_CONTRACTOR = "FLASH LOCAÇÃO DE MÃO DE OBRA";
 const REPORT_FORMAT = "pdf";
 const MAX_ACTIVITIES = 20;
+const MAX_PHOTO_BYTES = 30 * 1024 * 1024;
+const PHOTO_LABELS = {
+  fotoAntes: "A foto de entrada 1",
+  fotoDepois: "A foto de saída 1",
+  fotoAntes2: "A foto de entrada 2",
+  fotoDepois2: "A foto de saída 2"
+};
 
 const activityContainer = document.querySelector("#activities");
 const activityTemplate = document.querySelector("#activity-template");
@@ -268,6 +275,7 @@ function createActivityCard(data) {
   );
   const PHOTO_FIELDS = ["fotoAntes", "fotoDepois", "fotoAntes2", "fotoDepois2"];
   const photos = Object.fromEntries(PHOTO_FIELDS.map((name) => [name, ""]));
+  const photoErrors = {};
   const photoPromises = Object.fromEntries(
     PHOTO_FIELDS.map((name) => [name, Promise.resolve()])
   );
@@ -356,8 +364,27 @@ function createActivityCard(data) {
     }
   };
 
+  const setPhotoError = (fieldName, message = "") => {
+    const slot = fields[fieldName].closest(".photo-slot");
+    let note = slot.querySelector(".photo-error");
+    if (message) {
+      photoErrors[fieldName] = message;
+      if (!note) {
+        note = document.createElement("p");
+        note.className = "photo-error";
+        note.setAttribute("role", "alert");
+        slot.querySelector(".photo-input").after(note);
+      }
+      note.textContent = message;
+    } else {
+      delete photoErrors[fieldName];
+      note?.remove();
+    }
+  };
+
   const setPhoto = (fieldName, dataUrl) => {
     photos[fieldName] = dataUrl || "";
+    if (photos[fieldName]) setPhotoError(fieldName, "");
     const input = fields[fieldName];
     const label = input.closest(".photo-input");
     const preview = label.querySelector("img");
@@ -397,7 +424,10 @@ function createActivityCard(data) {
     setSavedRecordId("");
     applyDefaultDates();
     syncMaintenanceType();
-    PHOTO_FIELDS.forEach((name) => setPhoto(name, ""));
+    PHOTO_FIELDS.forEach((name) => {
+      setPhoto(name, "");
+      setPhotoError(name, "");
+    });
     setStatus("concluida");
   };
 
@@ -412,7 +442,10 @@ function createActivityCard(data) {
     fields.legendaDepois.value = activity.legendaDepois || "";
     fields.legendaAntes2.value = activity.legendaAntes2 || "";
     fields.legendaDepois2.value = activity.legendaDepois2 || "";
-    PHOTO_FIELDS.forEach((name) => setPhoto(name, activity[name] || ""));
+    PHOTO_FIELDS.forEach((name) => {
+      setPhoto(name, activity[name] || "");
+      setPhotoError(name, "");
+    });
     syncMaintenanceType();
     setStatus(activity.status === "em-espera" ? "em-espera" : "concluida");
     setSavedRecordId(activity.recordId || "");
@@ -480,17 +513,21 @@ function createActivityCard(data) {
     const photoField = fields[fieldName];
     photoField.addEventListener("change", () => {
       const file = photoField.files[0];
-      if (!file) {
-        setPhoto(fieldName, "");
-        return;
-      }
+      // Sem arquivo (seleção cancelada): mantém a foto que já estava na caixa.
+      if (!file) return;
       applyDefaultDates();
+      setPhotoError(fieldName, "");
       photoPromises[fieldName] = fileToDataUrl(file)
         .then((dataUrl) => setPhoto(fieldName, dataUrl))
         .catch((error) => {
-          setFormMessage(error.message, "error");
           setPhoto(fieldName, "");
-        });
+          setPhotoError(fieldName, `Foto não carregada: ${error.message}`);
+          setFormMessage(
+            `${PHOTO_LABELS[fieldName]} não foi carregada: ${error.message}`,
+            "error"
+          );
+        })
+        .finally(updateSummary);
     });
   }
 
@@ -504,6 +541,7 @@ function createActivityCard(data) {
     syncMaintenanceType,
     updateSummary,
     getSavedRecordId: () => savedRecordId,
+    getPhotoErrors: () => ({ ...photoErrors }),
     setSavedRecordId
   };
 
@@ -904,8 +942,29 @@ async function saveOccurrenceFromCard(activityCard) {
   upsertStateRecord(record);
   activityCard.setSavedRecordId(record.id);
   renderAllDataViews();
-  setFormMessage(`Ocorrência ${recordLabel(record)} salva individualmente.`, "success");
+  const photoWarning = photoErrorSummary([activityCard]);
+  setFormMessage(
+    photoWarning
+      ? `Ocorrência ${recordLabel(record)} salva, mas ${photoWarning}`
+      : `Ocorrência ${recordLabel(record)} salva individualmente.`,
+    photoWarning ? "warning" : "success"
+  );
   return record;
+}
+
+function photoErrorSummary(entries = activityCards) {
+  const problems = entries.flatMap((entry, index) =>
+    Object.entries(entry.getPhotoErrors?.() || {}).map(([field]) => {
+      const label = PHOTO_LABELS[field].replace(/^A /, "a ");
+      return entries.length > 1 ? `${label} da ocorrência ${index + 1}` : label;
+    })
+  );
+  if (!problems.length) return "";
+  const list =
+    problems.length === 1
+      ? problems[0]
+      : `${problems.slice(0, -1).join(", ")} e ${problems.at(-1)}`;
+  return `${list} não ${problems.length === 1 ? "foi carregada" : "foram carregadas"}. Veja o aviso na caixa da foto e selecione a imagem novamente.`;
 }
 
 async function exportOccurrenceFromCard(activityCard, button) {
@@ -921,6 +980,8 @@ async function exportOccurrenceFromCard(activityCard, button) {
     await exportSavedRecord(record, button, REPORT_FORMAT, {
       successMessage: "PDF individual da ocorrência baixado com sucesso."
     });
+    const photoWarning = photoErrorSummary([activityCard]);
+    if (photoWarning) setFormMessage(`PDF baixado, mas ${photoWarning}`, "warning");
   } finally {
     button.disabled = false;
     button.textContent = activityCard.getSavedRecordId()
@@ -979,7 +1040,11 @@ async function saveCurrentRecord(options = {}) {
   saveRecordButton.textContent = "Atualizar medição";
   renderAllDataViews();
   if (!options.silent) {
-    setFormMessage("Medição salva nos registros.", "success");
+    const photoWarning = photoErrorSummary();
+    setFormMessage(
+      photoWarning ? `Medição salva, mas ${photoWarning}` : "Medição salva nos registros.",
+      photoWarning ? "warning" : "success"
+    );
   }
   return record;
 }
@@ -1042,6 +1107,8 @@ reportForm.addEventListener("submit", async (event) => {
   const record = await saveCurrentRecord({ silent: true });
   if (!record) return;
   await exportSavedRecord(record, generateButton, REPORT_FORMAT);
+  const photoWarning = photoErrorSummary();
+  if (photoWarning) setFormMessage(`Relatório gerado, mas ${photoWarning}`, "warning");
 });
 
 async function exportSavedActivity(parentRecord, activity, button, format = REPORT_FORMAT) {
@@ -1710,46 +1777,80 @@ function updateProgress() {
 
 async function fileToDataUrl(file) {
   if (!file) return "";
-  if (!["image/jpeg", "image/png"].includes(file.type)) {
-    throw new Error("Use somente imagens JPG ou PNG.");
+  const isImage =
+    String(file.type || "").startsWith("image/") ||
+    /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i.test(file.name || "");
+  if (!isImage) {
+    throw new Error("o arquivo escolhido não é uma imagem.");
   }
-  if (file.size > 10 * 1024 * 1024) {
-    throw new Error(`${file.name} ultrapassa o limite de 10 MB.`);
+  if (file.size > MAX_PHOTO_BYTES) {
+    throw new Error("a imagem passa de 30 MB. Escolha uma foto menor.");
   }
-  return await new Promise((resolve, reject) => {
-    const sourceUrl = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement("canvas");
-      const targetWidth = 900;
-      const targetHeight = 450;
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      const context = canvas.getContext("2d");
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, targetWidth, targetHeight);
-      const scale = Math.min(
-        targetWidth / image.naturalWidth,
-        targetHeight / image.naturalHeight
-      );
-      const width = image.naturalWidth * scale;
-      const height = image.naturalHeight * scale;
-      context.drawImage(
-        image,
-        (targetWidth - width) / 2,
-        (targetHeight - height) / 2,
-        width,
-        height
-      );
-      URL.revokeObjectURL(sourceUrl);
-      resolve(canvas.toDataURL("image/jpeg", 0.65));
+
+  const source = await decodeImage(file);
+  try {
+    const canvas = document.createElement("canvas");
+    const targetWidth = 900;
+    const targetHeight = 450;
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, targetWidth, targetHeight);
+    const scale = Math.min(targetWidth / source.width, targetHeight / source.height);
+    const width = source.width * scale;
+    const height = source.height * scale;
+    context.drawImage(
+      source.image,
+      (targetWidth - width) / 2,
+      (targetHeight - height) / 2,
+      width,
+      height
+    );
+    return canvas.toDataURL("image/jpeg", 0.65);
+  } finally {
+    source.release();
+  }
+}
+
+// Abre a imagem em qualquer formato que o navegador saiba ler (JPG, PNG, WEBP,
+// HEIC em aparelhos compatíveis), respeitando a rotação gravada pela câmera.
+async function decodeImage(file) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return {
+        image: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        release: () => bitmap.close?.()
+      };
+    } catch {
+      // Tenta de novo pelo elemento <img> abaixo.
+    }
+  }
+
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = reject;
+      element.src = sourceUrl;
+    });
+    if (!image.naturalWidth || !image.naturalHeight) throw new Error("vazia");
+    return {
+      image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      release: () => URL.revokeObjectURL(sourceUrl)
     };
-    image.onerror = () => {
-      URL.revokeObjectURL(sourceUrl);
-      reject(new Error(`Não foi possível processar ${file.name}.`));
-    };
-    image.src = sourceUrl;
-  });
+  } catch {
+    URL.revokeObjectURL(sourceUrl);
+    throw new Error(
+      "este navegador não conseguiu abrir a imagem (formato não suportado). Envie a foto em JPG ou PNG."
+    );
+  }
 }
 
 async function getServiceConfig() {

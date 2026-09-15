@@ -2602,3 +2602,16 @@ input[readonly] {
   width: 15px;
   height: 15px;
 }
+
+/* Aviso de foto que não entrou */
+.photo-error {
+  margin: 0;
+  border: 1px solid #e1bcbc;
+  border-radius: 6px;
+  background: #fff7f7;
+  padding: 7px 10px;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
