@@ -2093,3 +2093,60 @@ function refreshIcons() {
     }
   });
 }
+// Encontre o local onde você seleciona seus botões no app.js
+const btnExportPdf = document.getElementById('btn-export-pdf');
+const btnExportPptx = document.getElementById('btn-export-pptx');
+const btnExportDocx = document.getElementById('btn-export-docx');
+
+// Criação dos Event Listeners para cada botão
+if (btnExportPdf) btnExportPdf.addEventListener('click', () => gerarRelatorio('pdf'));
+if (btnExportPptx) btnExportPptx.addEventListener('click', () => gerarRelatorio('pptx'));
+if (btnExportDocx) btnExportDocx.addEventListener('click', () => gerarRelatorio('docx'));
+
+// Função principal que envia os dados para o backend
+async function gerarRelatorio(formatoEscolhido) {
+  try {
+    // Aqui você coleta os dados da tela (mantenha como você já faz hoje)
+    const metadata = coletarMetadataDaTela(); 
+    const activities = coletarAtividadesDaTela();
+
+    // 🔴 O SEGREDO ESTÁ AQUI: Adicionar o "format" no objeto que vai para a API
+    const payload = {
+      metadata: metadata,
+      activities: activities,
+      format: formatoEscolhido // Envia 'pdf', 'pptx' ou 'docx'
+    };
+
+    // Chamada para a sua API
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error('Falha ao gerar o relatório');
+    }
+
+    // Lógica para fazer o download do arquivo que o servidor devolveu
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    // Define a extensão correta do arquivo na hora de baixar
+    const extensao = formatoEscolhido === 'docx' ? 'docx' : formatoEscolhido;
+    a.download = `Relatorio_Fotografico.${extensao}`;
+    
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+  } catch (error) {
+    console.error("Erro na exportação:", error);
+    alert("Ocorreu um erro ao exportar o documento.");
+  }
+}
