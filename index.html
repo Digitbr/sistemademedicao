@@ -7,7 +7,6 @@
     <title>Sistema de Medição | Relatório Fotográfico</title>
     <link rel="stylesheet" href="/styles.css?v=20260915-3" />
     <style>
-      /* Pequeno ajuste para os 4 botões ficarem bem alinhados no mobile e desktop */
       .export-buttons-group {
         display: flex;
         flex-wrap: wrap;
@@ -245,7 +244,7 @@
                     Salvar medição
                   </button>
                   
-                  <!-- ÚNICO LOCAL CORRETO ONDE OS 4 BOTÕES FORAM MANTIDOS -->
+                  <!-- BOTÕES DE EXPORTAÇÃO -->
                   <div class="export-buttons-group">
                     <button type="submit" id="generate-button" class="primary-action">Exportar PDF</button>
                     <button type="submit" id="generate-word-button" class="secondary-action">Word</button>
@@ -352,7 +351,7 @@
       ></button>
     </div>
 
-    <!-- TEMPLATE DAS ATIVIDADES/FOTOS -->
+    <!-- TEMPLATE ORIGINAL DAS OCORRÊNCIAS COM OS CAMPOS DE FOTO E LEGENDA -->
     <template id="activity-template">
       <article class="activity-card">
         <button type="button" class="activity-card__header">
@@ -393,6 +392,7 @@
             </label>
           </div>
 
+          <!-- ESPAÇOS DE IMAGENS E DESCRIÇÕES -->
           <div class="photo-grid">
             <p class="photo-row-title is-entry">Antes do serviço</p>
             <div class="photo-slot">
