@@ -1,3 +1,4 @@
+import { requireUser } from "../lib/auth.js";
 import { buildReport } from "../lib/report.js";
 
 const DEFAULT_RECIPIENT = "comercial1@primecsg.com.br";
@@ -16,6 +17,8 @@ export default async function handler(request, response) {
     response.status(405).json({ error: "Método não permitido." });
     return;
   }
+
+  if (!requireUser(request, response)) return;
 
   try {
     const payload =
