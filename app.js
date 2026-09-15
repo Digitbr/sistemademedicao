@@ -15,6 +15,9 @@ const PHOTO_LABELS = {
 const activityContainer = document.querySelector("#activities");
 const activityTemplate = document.querySelector("#activity-template");
 const reportForm = document.querySelector("#report-form");
+const generateWordButton = document.querySelector("#generate-word-button");
+const generatePptxButton = document.querySelector("#generate-pptx-button");
+const generateExcelButton = document.querySelector("#generate-excel-button"); // Adicione esta linha
 
 const generateButton = document.querySelector("#generate-button");
 const generateWordButton = document.querySelector("#generate-word-button"); // NOVO
