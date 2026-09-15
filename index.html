@@ -3,12 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Geração e envio de relatórios fotográficos de manutenção."
-    />
+    <meta name="description" content="Geração e envio de relatórios fotográficos de manutenção." />
     <title>Sistema de Medição | Relatório Fotográfico</title>
     <link rel="stylesheet" href="/styles.css?v=20260915-3" />
+    <style>
+      /* Pequeno ajuste para os 4 botões ficarem bem alinhados no mobile e desktop */
+      .export-buttons-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+        width: 100%;
+      }
+      .export-buttons-group button {
+        flex: 1;
+        min-width: 140px;
+      }
+    </style>
   </head>
   <body>
     <div class="app-shell">
@@ -73,109 +84,38 @@
         </header>
 
         <main class="page">
-      <section class="app-view" data-view-panel="dashboard">
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">Resumo executivo</p>
-            <h1>Dashboard de medições</h1>
-            <p>Acompanhe produtividade, pendências e evolução dos serviços.</p>
-          </div>
-          <button type="button" class="primary-action" data-go-to="report">
-            <i data-lucide="plus" aria-hidden="true"></i>
-            Nova medição
-          </button>
-        </div>
-
-        <section class="dashboard-toolbar" aria-label="Filtros do dashboard">
-          <div class="toolbar-title">
-            <i data-lucide="list-filter" aria-hidden="true"></i>
-            <span>Filtrar indicadores</span>
-          </div>
-          <label>
-            <span>Período</span>
-            <select id="dashboard-period-filter">
-              <option value="all">Todo o histórico</option>
-              <option value="30">Últimos 30 dias</option>
-              <option value="90">Últimos 90 dias</option>
-              <option value="180">Últimos 6 meses</option>
-            </select>
-          </label>
-          <label>
-            <span>Tipo de manutenção</span>
-            <select id="dashboard-type-filter">
-              <option value="all">Todos os tipos</option>
-              <option>Preventiva</option>
-              <option>Corretiva</option>
-              <option>Preditiva</option>
-              <option>Emergencial</option>
-              <option>Instalação ou adequação</option>
-              <option>Inspeção técnica</option>
-              <option>Outro</option>
-            </select>
-          </label>
-          <button type="button" class="text-action" id="clear-dashboard-filters">
-            Limpar filtros
-          </button>
-        </section>
-
-        <div id="dashboard-content"></div>
-      </section>
-
-      <section class="app-view is-active" data-view-panel="report">
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">Manutenção e evidências</p>
-            <h1 id="report-page-title">Nova medição de serviço</h1>
-            <p id="report-page-description">
-              Preencha os dados, registre as atividades e gere o relatório.
-            </p>
-          </div>
-          <div class="progress-summary">
-            <strong id="activity-progress">0 ocorrências</strong>
-            <span>registradas nesta medição</span>
-          </div>
-        </div>
-
-        <form id="report-form">
-          <section class="panel">
-            <div class="section-heading">
-              <span class="step">01</span>
+          <!-- VIEW DASHBOARD -->
+          <section class="app-view" data-view-panel="dashboard">
+            <div class="page-heading">
               <div>
-                <h2>Identificação do serviço</h2>
-                <p>Dados que aparecem no cabeçalho do relatório.</p>
+                <p class="eyebrow">Resumo executivo</p>
+                <h1>Dashboard de medições</h1>
+                <p>Acompanhe produtividade, pendências e evolução dos serviços.</p>
               </div>
+              <button type="button" class="primary-action" data-go-to="report">
+                <i data-lucide="plus" aria-hidden="true"></i>
+                Nova medição
+              </button>
             </div>
 
-            <div class="form-grid">
+            <section class="dashboard-toolbar" aria-label="Filtros do dashboard">
+              <div class="toolbar-title">
+                <i data-lucide="list-filter" aria-hidden="true"></i>
+                <span>Filtrar indicadores</span>
+              </div>
               <label>
-                <span>Competência *</span>
-                <input
-                  name="competencia"
-                  required
-                  autocomplete="off"
-                  placeholder="Competência atual"
-                />
+                <span>Período</span>
+                <select id="dashboard-period-filter">
+                  <option value="all">Todo o histórico</option>
+                  <option value="30">Últimos 30 dias</option>
+                  <option value="90">Últimos 90 dias</option>
+                  <option value="180">Últimos 6 meses</option>
+                </select>
               </label>
               <label>
-                <span>Nº da ordem de serviço</span>
-                <input
-                  name="ordemServico"
-                  autocomplete="off"
-                  placeholder="Ex.: OS-001234"
-                />
-              </label>
-              <label>
-                <span>Contratada *</span>
-                <input
-                  name="contratada"
-                  required
-                  value="FLASH LOCAÇÃO DE MÃO DE OBRA"
-                />
-              </label>
-              <label>
-                <span>Tipo de manutenção *</span>
-                <select name="tipoManutencao" required>
-                  <option value="">Selecione</option>
+                <span>Tipo de manutenção</span>
+                <select id="dashboard-type-filter">
+                  <option value="all">Todos os tipos</option>
                   <option>Preventiva</option>
                   <option>Corretiva</option>
                   <option>Preditiva</option>
@@ -185,168 +125,223 @@
                   <option>Outro</option>
                 </select>
               </label>
-            </div>
+              <button type="button" class="text-action" id="clear-dashboard-filters">
+                Limpar filtros
+              </button>
+            </section>
+            <div id="dashboard-content"></div>
           </section>
 
-          <section class="panel activities-panel">
-            <div class="section-heading">
-              <span class="step">02</span>
+          <!-- VIEW REPORT (NOVA MEDIÇÃO) -->
+          <section class="app-view is-active" data-view-panel="report">
+            <div class="page-heading">
               <div>
-                <h2>Ocorrências, OS e evidências</h2>
-                <p>Adicione uma ocorrência por vez. Cada ocorrência pode ter uma OS própria, ser salva, editada ou excluída individualmente.</p>
+                <p class="eyebrow">Manutenção e evidências</p>
+                <h1 id="report-page-title">Nova medição de serviço</h1>
+                <p id="report-page-description">
+                  Preencha os dados, registre as atividades e gere o relatório.
+                </p>
+              </div>
+              <div class="progress-summary">
+                <strong id="activity-progress">0 ocorrências</strong>
+                <span>registradas nesta medição</span>
               </div>
             </div>
-            <div id="activities" class="activities"></div>
-            <button type="button" class="add-occurrence" id="add-occurrence">
-              <span class="add-occurrence__icon" aria-hidden="true">+</span>
-              <span class="add-occurrence__text">
-                <strong>Nova ocorrência</strong>
-                <small>Adicionar mais uma ocorrência a esta medição</small>
-              </span>
-            </button>
+
+            <form id="report-form">
+              <section class="panel">
+                <div class="section-heading">
+                  <span class="step">01</span>
+                  <div>
+                    <h2>Identificação do serviço</h2>
+                    <p>Dados que aparecem no cabeçalho do relatório.</p>
+                  </div>
+                </div>
+
+                <div class="form-grid">
+                  <label>
+                    <span>Competência *</span>
+                    <input
+                      name="competencia"
+                      required
+                      autocomplete="off"
+                      placeholder="Competência atual"
+                    />
+                  </label>
+                  <label>
+                    <span>Nº da ordem de serviço</span>
+                    <input
+                      name="ordemServico"
+                      autocomplete="off"
+                      placeholder="Ex.: OS-001234"
+                    />
+                  </label>
+                  <label>
+                    <span>Contratada *</span>
+                    <input
+                      name="contratada"
+                      required
+                      value="FLASH LOCAÇÃO DE MÃO DE OBRA"
+                    />
+                  </label>
+                  <label>
+                    <span>Tipo de manutenção *</span>
+                    <select name="tipoManutencao" required>
+                      <option value="">Selecione</option>
+                      <option>Preventiva</option>
+                      <option>Corretiva</option>
+                      <option>Preditiva</option>
+                      <option>Emergencial</option>
+                      <option>Instalação ou adequação</option>
+                      <option>Inspeção técnica</option>
+                      <option>Outro</option>
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <section class="panel activities-panel">
+                <div class="section-heading">
+                  <span class="step">02</span>
+                  <div>
+                    <h2>Ocorrências, OS e evidências</h2>
+                    <p>Adicione uma ocorrência por vez. Cada ocorrência pode ter uma OS própria, ser salva, editada ou excluída individualmente.</p>
+                  </div>
+                </div>
+                <div id="activities" class="activities"></div>
+                <button type="button" class="add-occurrence" id="add-occurrence">
+                  <span class="add-occurrence__icon" aria-hidden="true">+</span>
+                  <span class="add-occurrence__text">
+                    <strong>Nova ocorrência</strong>
+                    <small>Adicionar mais uma ocorrência a esta medição</small>
+                  </span>
+                </button>
+              </section>
+
+              <section class="waiting-reminders" id="waiting-reminders" hidden>
+                <div class="section-heading">
+                  <span class="step">!</span>
+                  <div>
+                    <h2>Lembretes de serviços em espera</h2>
+                    <p>Itens marcados em espera ficam aqui para o fiscal retomar e concluir depois.</p>
+                  </div>
+                </div>
+                <div id="waiting-reminder-list" class="waiting-reminder-list"></div>
+              </section>
+
+              <section class="submit-panel">
+                <div class="submit-panel__info">
+                  <span class="email-label">Destino da exportação</span>
+                  <strong id="report-recipient">comercial1@primecsg.com.br</strong>
+                  <p id="form-status" role="status">
+                    Salve a medição ou gere o relatório no formato desejado.
+                  </p>
+                </div>
+                <div class="submit-actions">
+                  <button type="button" class="secondary-action" id="reset-record-button">
+                    Limpar formulário
+                  </button>
+                  <button type="button" class="secondary-action" id="save-record-button">
+                    Salvar medição
+                  </button>
+                  
+                  <!-- ÚNICO LOCAL CORRETO ONDE OS 4 BOTÕES FORAM MANTIDOS -->
+                  <div class="export-buttons-group">
+                    <button type="submit" id="generate-button" class="primary-action">Exportar PDF</button>
+                    <button type="submit" id="generate-word-button" class="secondary-action">Word</button>
+                    <button type="submit" id="generate-pptx-button" class="secondary-action">PowerPoint</button>
+                    <button type="submit" id="generate-excel-button" class="secondary-action">Excel</button>
+                  </div>
+                  
+                </div>
+              </section>
+            </form>
           </section>
 
-          <section class="waiting-reminders" id="waiting-reminders" hidden>
-            <div class="section-heading">
-              <span class="step">!</span>
+          <!-- VIEW OPERATIONS -->
+          <section class="app-view" data-view-panel="operations">
+            <div class="page-heading">
               <div>
-                <h2>Lembretes de serviços em espera</h2>
-                <p>Itens marcados em espera ficam aqui para o fiscal retomar e concluir depois.</p>
+                <p class="eyebrow">Gestão diária</p>
+                <h1>Visão operacional</h1>
+                <p>Prioridades, responsáveis técnicos e atividades que precisam de acompanhamento.</p>
+              </div>
+              <button type="button" class="primary-action" data-go-to="report">
+                <i data-lucide="plus" aria-hidden="true"></i>
+                Nova medição
+              </button>
+            </div>
+            <div id="operations-content"></div>
+          </section>
+
+          <!-- VIEW RECORDS -->
+          <section class="app-view" data-view-panel="records">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">Histórico</p>
+                <h1>Registros de medições</h1>
+                <p>Abra uma caixa para visualizar, editar, exportar ou apagar.</p>
+              </div>
+              <div class="page-actions">
+                <input type="file" id="records-import-input" accept="application/json" hidden />
+                <button type="button" class="secondary-action" id="import-records-button">
+                  <i data-lucide="upload" aria-hidden="true"></i>
+                  Importar backup
+                </button>
+                <button type="button" class="secondary-action" id="export-records-button">
+                  <i data-lucide="download" aria-hidden="true"></i>
+                  Exportar backup
+                </button>
+                <button type="button" class="primary-action" data-go-to="report">
+                  <i data-lucide="plus" aria-hidden="true"></i>
+                  Nova medição
+                </button>
               </div>
             </div>
-            <div id="waiting-reminder-list" class="waiting-reminder-list"></div>
+
+            <section class="panel records-toolbar">
+              <label>
+                <span>Buscar</span>
+                <input id="record-search" placeholder="OS, competência, responsável técnico ou atividade" />
+              </label>
+              <label>
+                <span>Tipo de manutenção</span>
+                <select id="record-type-filter">
+                  <option value="all">Todos os tipos</option>
+                  <option>Preventiva</option>
+                  <option>Corretiva</option>
+                  <option>Preditiva</option>
+                  <option>Emergencial</option>
+                  <option>Instalação ou adequação</option>
+                  <option>Inspeção técnica</option>
+                  <option>Outro</option>
+                </select>
+              </label>
+              <label>
+                <span>Situação</span>
+                <select id="record-status-filter">
+                  <option value="all">Todas</option>
+                  <option value="complete">Concluídas</option>
+                  <option value="waiting">Com atividades em espera</option>
+                </select>
+              </label>
+              <label>
+                <span>Ordenar por</span>
+                <select id="record-sort-filter">
+                  <option value="recent">Mais recentes</option>
+                  <option value="oldest">Mais antigos</option>
+                  <option value="order">Ordem de serviço</option>
+                </select>
+              </label>
+              <div class="records-toolbar__summary">
+                <strong id="records-result-count">0 registros</strong>
+                <button type="button" class="text-action" id="clear-record-filters">
+                  Limpar filtros
+                </button>
+              </div>
+            </section>
+            <div id="records-list" class="records-list"></div>
           </section>
-
-          <section class="submit-panel">
-            <div class="submit-panel__info">
-              <span class="email-label">Destino da exportação</span>
-              <strong id="report-recipient">comercial1@primecsg.com.br</strong>
-              <p id="form-status" role="status">
-                Salve a medição ou gere o relatório em PDF.
-              </p>
-            </div>
-            <div class="submit-actions">
-              <span class="export-format-control is-static">
-                <span>Formato do relatório</span>
-                <strong>PDF (.pdf)</strong>
-              </span>
-              <button type="button" class="secondary-action" id="reset-record-button">
-                Limpar formulário
-              </button>
-              <button type="button" class="secondary-action" id="save-record-button">
-                Salvar medição
-              </button>
-              <div class="actions-container">
-  <!-- Esse é o seu botão original de PDF -->
-  <button type="submit" id="generate-button" class="primary-action">
-    Salvar e gerar PDF
-  </button>
-  
-  <!-- Cole estes dois novos botões ao lado -->
-  <button type="submit" id="generate-word-button" class="secondary-action">
-    Exportar Word
-  </button>
-  <button type="submit" id="generate-pptx-button" class="secondary-action">
-    Exportar PowerPoint
-  </button>
-</div>
-            </div>
-          </section>
-        </form>
-      </section>
-          <!-- Procure a div onde ficam os botões de ação do seu sistema -->
-<div class="actions-container">
-  <!-- Seu botão de PDF que já existe (o ID pode ser diferente no seu código, mantenha o seu) -->
-  <button id="btn-export-pdf" class="btn-primary">Exportar PDF</button>
-
-  <!-- Adicione estes dois novos botões -->
-  <button id="btn-export-pptx" class="btn-secondary">Exportar PowerPoint</button>
-  <button id="btn-export-docx" class="btn-secondary">Exportar Word</button>
-</div>
-
-      <section class="app-view" data-view-panel="operations">
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">Gestão diária</p>
-            <h1>Visão operacional</h1>
-            <p>Prioridades, responsáveis técnicos e atividades que precisam de acompanhamento.</p>
-          </div>
-          <button type="button" class="primary-action" data-go-to="report">
-            <i data-lucide="plus" aria-hidden="true"></i>
-            Nova medição
-          </button>
-        </div>
-        <div id="operations-content"></div>
-      </section>
-
-      <section class="app-view" data-view-panel="records">
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">Histórico</p>
-            <h1>Registros de medições</h1>
-            <p>Abra uma caixa para visualizar, editar, exportar ou apagar.</p>
-          </div>
-          <div class="page-actions">
-            <input type="file" id="records-import-input" accept="application/json" hidden />
-            <button type="button" class="secondary-action" id="import-records-button">
-              <i data-lucide="upload" aria-hidden="true"></i>
-              Importar backup
-            </button>
-            <button type="button" class="secondary-action" id="export-records-button">
-              <i data-lucide="download" aria-hidden="true"></i>
-              Exportar backup
-            </button>
-            <button type="button" class="primary-action" data-go-to="report">
-              <i data-lucide="plus" aria-hidden="true"></i>
-              Nova medição
-            </button>
-          </div>
-        </div>
-
-        <section class="panel records-toolbar">
-          <label>
-            <span>Buscar</span>
-            <input id="record-search" placeholder="OS, competência, responsável técnico ou atividade" />
-          </label>
-          <label>
-            <span>Tipo de manutenção</span>
-            <select id="record-type-filter">
-              <option value="all">Todos os tipos</option>
-              <option>Preventiva</option>
-              <option>Corretiva</option>
-              <option>Preditiva</option>
-              <option>Emergencial</option>
-              <option>Instalação ou adequação</option>
-              <option>Inspeção técnica</option>
-              <option>Outro</option>
-            </select>
-          </label>
-          <label>
-            <span>Situação</span>
-            <select id="record-status-filter">
-              <option value="all">Todas</option>
-              <option value="complete">Concluídas</option>
-              <option value="waiting">Com atividades em espera</option>
-            </select>
-          </label>
-          <label>
-            <span>Ordenar por</span>
-            <select id="record-sort-filter">
-              <option value="recent">Mais recentes</option>
-              <option value="oldest">Mais antigos</option>
-              <option value="order">Ordem de serviço</option>
-            </select>
-          </label>
-          <div class="records-toolbar__summary">
-            <strong id="records-result-count">0 registros</strong>
-            <button type="button" class="text-action" id="clear-record-filters">
-              Limpar filtros
-            </button>
-          </div>
-        </section>
-
-        <div id="records-list" class="records-list"></div>
-      </section>
         </main>
       </div>
       <button
@@ -357,6 +352,7 @@
       ></button>
     </div>
 
+    <!-- TEMPLATE DAS ATIVIDADES/FOTOS -->
     <template id="activity-template">
       <article class="activity-card">
         <button type="button" class="activity-card__header">
@@ -402,86 +398,50 @@
             <div class="photo-slot">
               <label class="photo-input is-entry">
                 <span class="photo-input__label">Foto antes 1</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  data-field="fotoAntes"
-                />
+                <input type="file" accept="image/*" data-field="fotoAntes" />
                 <span class="photo-input__action">Selecionar imagem</span>
                 <img alt="Prévia da foto antes 1" />
               </label>
               <label class="photo-caption">
                 <span>Descrição da foto antes 1</span>
-                <textarea
-                  data-field="legendaAntes"
-                  rows="2"
-                  maxlength="300"
-                  placeholder="Ex.: Vazamento na conexão de saída do reservatório"
-                ></textarea>
+                <textarea data-field="legendaAntes" rows="2" maxlength="300" placeholder="Ex.: Vazamento na conexão de saída do reservatório"></textarea>
               </label>
             </div>
             <div class="photo-slot">
               <label class="photo-input is-entry">
                 <span class="photo-input__label">Foto antes 2</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  data-field="fotoAntes2"
-                />
+                <input type="file" accept="image/*" data-field="fotoAntes2" />
                 <span class="photo-input__action">Selecionar imagem</span>
                 <img alt="Prévia da foto antes 2" />
               </label>
               <label class="photo-caption">
                 <span>Descrição da foto antes 2</span>
-                <textarea
-                  data-field="legendaAntes2"
-                  rows="2"
-                  maxlength="300"
-                  placeholder="Ex.: Outro ângulo do problema encontrado"
-                ></textarea>
+                <textarea data-field="legendaAntes2" rows="2" maxlength="300" placeholder="Ex.: Outro ângulo do problema encontrado"></textarea>
               </label>
             </div>
             <p class="photo-row-title is-exit">Depois do serviço</p>
             <div class="photo-slot">
               <label class="photo-input is-exit">
                 <span class="photo-input__label">Foto depois 1</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  data-field="fotoDepois"
-                />
+                <input type="file" accept="image/*" data-field="fotoDepois" />
                 <span class="photo-input__action">Selecionar imagem</span>
                 <img alt="Prévia da foto depois 1" />
               </label>
               <label class="photo-caption">
                 <span>Descrição da foto depois 1</span>
-                <textarea
-                  data-field="legendaDepois"
-                  rows="2"
-                  maxlength="300"
-                  placeholder="Ex.: Conexão substituída e vedada, sem vazamento"
-                ></textarea>
+                <textarea data-field="legendaDepois" rows="2" maxlength="300" placeholder="Ex.: Conexão substituída e vedada, sem vazamento"></textarea>
               </label>
             </div>
             <div class="photo-slot">
               <label class="photo-input is-exit">
                 <span class="photo-input__label">Foto depois 2</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  data-field="fotoDepois2"
-                />
+                <input type="file" accept="image/*" data-field="fotoDepois2" />
                 <span class="photo-input__action">Selecionar imagem</span>
                 <img alt="Prévia da foto depois 2" />
               </label>
               <label class="photo-caption">
                 <span>Descrição da foto depois 2</span>
-                <textarea
-                  data-field="legendaDepois2"
-                  rows="2"
-                  maxlength="300"
-                  placeholder="Ex.: Outro ângulo do serviço concluído"
-                ></textarea>
+                <textarea data-field="legendaDepois2" rows="2" maxlength="300" placeholder="Ex.: Outro ângulo do serviço concluído"></textarea>
               </label>
             </div>
           </div>
@@ -490,45 +450,24 @@
             <div>
               <span class="field-label">Situação da atividade</span>
               <div class="status-control" role="group" aria-label="Situação da atividade">
-                <button type="button" class="status-option is-active" data-status="concluida">
-                  Concluída
-                </button>
-                <button type="button" class="status-option" data-status="em-espera">
-                  Em espera
-                </button>
+                <button type="button" class="status-option is-active" data-status="concluida">Concluída</button>
+                <button type="button" class="status-option" data-status="em-espera">Em espera</button>
               </div>
               <input type="hidden" data-field="status" value="concluida" />
             </div>
 
             <label class="waiting-reason-field" hidden>
               <span>Motivo da espera</span>
-              <textarea
-                data-field="motivo"
-                rows="2"
-                placeholder="Explique o que falta para concluir este serviço"
-              ></textarea>
+              <textarea data-field="motivo" rows="2" placeholder="Explique o que falta para concluir este serviço"></textarea>
             </label>
 
             <div class="occurrence-save-panel">
               <span data-occurrence-save-status>Ocorrência ainda não salva individualmente.</span>
               <div>
-                <button type="button" class="secondary-action" data-save-occurrence>
-                  Salvar ocorrência
-                </button>
-                <button type="button" class="secondary-action" data-export-occurrence>
-                  Exportar PDF
-                </button>
-                <div class="actions-container">
-  <button type="submit" id="generate-button" class="primary-action">Salvar e gerar PDF</button>
-  <button type="submit" id="generate-word-button" class="secondary-action">Exportar Word</button>
-  <button type="submit" id="generate-pptx-button" class="secondary-action">Exportar PowerPoint</button>
-  <!-- NOVO BOTÃO AQUI -->
-  <button type="submit" id="generate-excel-button" class="secondary-action">Exportar Excel</button>
-</div>
+                <button type="button" class="secondary-action" data-save-occurrence>Salvar ocorrência</button>
+                <button type="button" class="secondary-action" data-export-occurrence>Exportar PDF</button>
                 <button type="button" class="clear-activity">Limpar campos</button>
-                <button type="button" class="remove-activity" data-remove-occurrence>
-                  Excluir ocorrência
-                </button>
+                <button type="button" class="remove-activity" data-remove-occurrence>Excluir ocorrência</button>
               </div>
             </div>
           </div>
