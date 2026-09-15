@@ -1,4 +1,358 @@
-<template id="activity-template">
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Geração e envio de relatórios fotográficos de manutenção." />
+    <title>Sistema de Medição | Relatório Fotográfico</title>
+    <link rel="stylesheet" href="/styles.css?v=20260915-3" />
+    <style>
+      .export-buttons-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+        width: 100%;
+      }
+      .export-buttons-group button {
+        flex: 1;
+        min-width: 140px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <span class="brand-mark">MP</span>
+          <span>
+            <strong>Medição Pro</strong>
+            <small>Gestão de serviços</small>
+          </span>
+        </div>
+        <nav class="main-nav" aria-label="Navegação principal">
+          <button type="button" class="nav-button" data-view="dashboard">
+            <i data-lucide="layout-dashboard" aria-hidden="true"></i>
+            <span>Dashboard</span>
+          </button>
+          <button type="button" class="nav-button is-active" data-view="report">
+            <i data-lucide="clipboard-plus" aria-hidden="true"></i>
+            <span>Nova medição</span>
+          </button>
+          <button type="button" class="nav-button" data-view="records">
+            <i data-lucide="archive" aria-hidden="true"></i>
+            <span>Registros</span>
+          </button>
+          <button type="button" class="nav-button" data-view="operations">
+            <i data-lucide="chart-no-axes-combined" aria-hidden="true"></i>
+            <span>Visão operacional</span>
+          </button>
+        </nav>
+
+        <div class="sidebar__footer">
+          <div class="session-user" id="session-user" hidden>
+            <div class="session-user__info">
+              <strong id="session-user-name"></strong>
+              <span id="session-user-email"></span>
+            </div>
+            <button type="button" class="logout-button" id="logout-button">
+              <i data-lucide="log-out" aria-hidden="true"></i>
+              <span>Sair</span>
+            </button>
+          </div>
+          <span class="service-status"><i></i> Sistema disponível</span>
+          <small>Relatórios e medições</small>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="workspace-header">
+          <button
+            type="button"
+            class="icon-button menu-toggle"
+            id="sidebar-toggle"
+            aria-label="Abrir menu"
+            aria-expanded="false"
+          >
+            <i data-lucide="menu" aria-hidden="true"></i>
+          </button>
+          <div>
+            <strong id="current-view-title">Dashboard</strong>
+            <span id="current-date"></span>
+          </div>
+        </header>
+
+        <main class="page">
+          <!-- VIEW DASHBOARD -->
+          <section class="app-view" data-view-panel="dashboard">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">Resumo executivo</p>
+                <h1>Dashboard de medições</h1>
+                <p>Acompanhe produtividade, pendências e evolução dos serviços.</p>
+              </div>
+              <button type="button" class="primary-action" data-go-to="report">
+                <i data-lucide="plus" aria-hidden="true"></i>
+                Nova medição
+              </button>
+            </div>
+
+            <section class="dashboard-toolbar" aria-label="Filtros do dashboard">
+              <div class="toolbar-title">
+                <i data-lucide="list-filter" aria-hidden="true"></i>
+                <span>Filtrar indicadores</span>
+              </div>
+              <label>
+                <span>Período</span>
+                <select id="dashboard-period-filter">
+                  <option value="all">Todo o histórico</option>
+                  <option value="30">Últimos 30 dias</option>
+                  <option value="90">Últimos 90 dias</option>
+                  <option value="180">Últimos 6 meses</option>
+                </select>
+              </label>
+              <label>
+                <span>Tipo de manutenção</span>
+                <select id="dashboard-type-filter">
+                  <option value="all">Todos os tipos</option>
+                  <option>Preventiva</option>
+                  <option>Corretiva</option>
+                  <option>Preditiva</option>
+                  <option>Emergencial</option>
+                  <option>Instalação ou adequação</option>
+                  <option>Inspeção técnica</option>
+                  <option>Outro</option>
+                </select>
+              </label>
+              <button type="button" class="text-action" id="clear-dashboard-filters">
+                Limpar filtros
+              </button>
+            </section>
+            <div id="dashboard-content"></div>
+          </section>
+
+          <!-- VIEW REPORT (NOVA MEDIÇÃO) -->
+          <section class="app-view is-active" data-view-panel="report">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">Manutenção e evidências</p>
+                <h1 id="report-page-title">Nova medição de serviço</h1>
+                <p id="report-page-description">
+                  Preencha os dados, registre as atividades e gere o relatório.
+                </p>
+              </div>
+              <div class="progress-summary">
+                <strong id="activity-progress">0 ocorrências</strong>
+                <span>registradas nesta medição</span>
+              </div>
+            </div>
+
+            <form id="report-form">
+              <section class="panel">
+                <div class="section-heading">
+                  <span class="step">01</span>
+                  <div>
+                    <h2>Identificação do serviço</h2>
+                    <p>Dados que aparecem no cabeçalho do relatório.</p>
+                  </div>
+                </div>
+
+                <div class="form-grid">
+                  <label>
+                    <span>Competência *</span>
+                    <input
+                      name="competencia"
+                      required
+                      autocomplete="off"
+                      placeholder="Competência atual"
+                    />
+                  </label>
+                  <label>
+                    <span>Nº da ordem de serviço</span>
+                    <input
+                      name="ordemServico"
+                      autocomplete="off"
+                      placeholder="Ex.: OS-001234"
+                    />
+                  </label>
+                  <label>
+                    <span>Contratada *</span>
+                    <input
+                      name="contratada"
+                      required
+                      value="FLASH LOCAÇÃO DE MÃO DE OBRA"
+                    />
+                  </label>
+                  <label>
+                    <span>Tipo de manutenção *</span>
+                    <select name="tipoManutencao" required>
+                      <option value="">Selecione</option>
+                      <option>Preventiva</option>
+                      <option>Corretiva</option>
+                      <option>Preditiva</option>
+                      <option>Emergencial</option>
+                      <option>Instalação ou adequação</option>
+                      <option>Inspeção técnica</option>
+                      <option>Outro</option>
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <section class="panel activities-panel">
+                <div class="section-heading">
+                  <span class="step">02</span>
+                  <div>
+                    <h2>Ocorrências, OS e evidências</h2>
+                    <p>Adicione uma ocorrência por vez. Cada ocorrência pode ter uma OS própria, ser salva, editada ou excluída individualmente.</p>
+                  </div>
+                </div>
+                <div id="activities" class="activities"></div>
+                <button type="button" class="add-occurrence" id="add-occurrence">
+                  <span class="add-occurrence__icon" aria-hidden="true">+</span>
+                  <span class="add-occurrence__text">
+                    <strong>Nova ocorrência</strong>
+                    <small>Adicionar mais uma ocorrência a esta medição</small>
+                  </span>
+                </button>
+              </section>
+
+              <section class="waiting-reminders" id="waiting-reminders" hidden>
+                <div class="section-heading">
+                  <span class="step">!</span>
+                  <div>
+                    <h2>Lembretes de serviços em espera</h2>
+                    <p>Itens marcados em espera ficam aqui para o fiscal retomar e concluir depois.</p>
+                  </div>
+                </div>
+                <div id="waiting-reminder-list" class="waiting-reminder-list"></div>
+              </section>
+
+              <section class="submit-panel">
+                <div class="submit-panel__info">
+                  <span class="email-label">Destino da exportação</span>
+                  <strong id="report-recipient">comercial1@primecsg.com.br</strong>
+                  <p id="form-status" role="status">
+                    Salve a medição ou gere o relatório no formato desejado.
+                  </p>
+                </div>
+                <div class="submit-actions">
+                  <button type="button" class="secondary-action" id="reset-record-button">
+                    Limpar formulário
+                  </button>
+                  <button type="button" class="secondary-action" id="save-record-button">
+                    Salvar medição
+                  </button>
+                  
+                  <!-- BOTÕES DE EXPORTAÇÃO -->
+                  <div class="export-buttons-group">
+                    <button type="submit" id="generate-button" class="primary-action">Exportar PDF</button>
+                    <button type="submit" id="generate-word-button" class="secondary-action">Word</button>
+                    <button type="submit" id="generate-pptx-button" class="secondary-action">PowerPoint</button>
+                    <button type="submit" id="generate-excel-button" class="secondary-action">Excel</button>
+                  </div>
+                  
+                </div>
+              </section>
+            </form>
+          </section>
+
+          <!-- VIEW OPERATIONS -->
+          <section class="app-view" data-view-panel="operations">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">Gestão diária</p>
+                <h1>Visão operacional</h1>
+                <p>Prioridades, responsáveis técnicos e atividades que precisam de acompanhamento.</p>
+              </div>
+              <button type="button" class="primary-action" data-go-to="report">
+                <i data-lucide="plus" aria-hidden="true"></i>
+                Nova medição
+              </button>
+            </div>
+            <div id="operations-content"></div>
+          </section>
+
+          <!-- VIEW RECORDS -->
+          <section class="app-view" data-view-panel="records">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">Histórico</p>
+                <h1>Registros de medições</h1>
+                <p>Abra uma caixa para visualizar, editar, exportar ou apagar.</p>
+              </div>
+              <div class="page-actions">
+                <input type="file" id="records-import-input" accept="application/json" hidden />
+                <button type="button" class="secondary-action" id="import-records-button">
+                  <i data-lucide="upload" aria-hidden="true"></i>
+                  Importar backup
+                </button>
+                <button type="button" class="secondary-action" id="export-records-button">
+                  <i data-lucide="download" aria-hidden="true"></i>
+                  Exportar backup
+                </button>
+                <button type="button" class="primary-action" data-go-to="report">
+                  <i data-lucide="plus" aria-hidden="true"></i>
+                  Nova medição
+                </button>
+              </div>
+            </div>
+
+            <section class="panel records-toolbar">
+              <label>
+                <span>Buscar</span>
+                <input id="record-search" placeholder="OS, competência, responsável técnico ou atividade" />
+              </label>
+              <label>
+                <span>Tipo de manutenção</span>
+                <select id="record-type-filter">
+                  <option value="all">Todos os tipos</option>
+                  <option>Preventiva</option>
+                  <option>Corretiva</option>
+                  <option>Preditiva</option>
+                  <option>Emergencial</option>
+                  <option>Instalação ou adequação</option>
+                  <option>Inspeção técnica</option>
+                  <option>Outro</option>
+                </select>
+              </label>
+              <label>
+                <span>Situação</span>
+                <select id="record-status-filter">
+                  <option value="all">Todas</option>
+                  <option value="complete">Concluídas</option>
+                  <option value="waiting">Com atividades em espera</option>
+                </select>
+              </label>
+              <label>
+                <span>Ordenar por</span>
+                <select id="record-sort-filter">
+                  <option value="recent">Mais recentes</option>
+                  <option value="oldest">Mais antigos</option>
+                  <option value="order">Ordem de serviço</option>
+                </select>
+              </label>
+              <div class="records-toolbar__summary">
+                <strong id="records-result-count">0 registros</strong>
+                <button type="button" class="text-action" id="clear-record-filters">
+                  Limpar filtros
+                </button>
+              </div>
+            </section>
+            <div id="records-list" class="records-list"></div>
+          </section>
+        </main>
+      </div>
+      <button
+        type="button"
+        class="sidebar-overlay"
+        id="sidebar-overlay"
+        aria-label="Fechar menu"
+      ></button>
+    </div>
+
+    <!-- TEMPLATE ORIGINAL DAS OCORRÊNCIAS COM OS CAMPOS DE FOTO E LEGENDA -->
+    <template id="activity-template">
       <article class="activity-card">
         <button type="button" class="activity-card__header">
           <span class="activity-number"></span>
@@ -38,10 +392,9 @@
             </label>
           </div>
 
-          <!-- BLOCO DE FOTOS E LEGENDAS EXATAMENTE COMO O APP.JS ESPERA -->
+          <!-- ESPAÇOS DE IMAGENS E DESCRIÇÕES -->
           <div class="photo-grid">
             <p class="photo-row-title is-entry">Antes do serviço</p>
-            
             <div class="photo-slot">
               <label class="photo-input is-entry">
                 <span class="photo-input__label">Foto antes 1</span>
@@ -51,10 +404,9 @@
               </label>
               <label class="photo-caption">
                 <span>Descrição da foto antes 1</span>
-                <textarea data-field="legendaAntes" rows="2" maxlength="300" placeholder="Ex.: Vazamento na conexão de saída"></textarea>
+                <textarea data-field="legendaAntes" rows="2" maxlength="300" placeholder="Ex.: Vazamento na conexão de saída do reservatório"></textarea>
               </label>
             </div>
-
             <div class="photo-slot">
               <label class="photo-input is-entry">
                 <span class="photo-input__label">Foto antes 2</span>
@@ -64,12 +416,10 @@
               </label>
               <label class="photo-caption">
                 <span>Descrição da foto antes 2</span>
-                <textarea data-field="legendaAntes2" rows="2" maxlength="300" placeholder="Ex.: Outro ângulo do problema"></textarea>
+                <textarea data-field="legendaAntes2" rows="2" maxlength="300" placeholder="Ex.: Outro ângulo do problema encontrado"></textarea>
               </label>
             </div>
-
             <p class="photo-row-title is-exit">Depois do serviço</p>
-
             <div class="photo-slot">
               <label class="photo-input is-exit">
                 <span class="photo-input__label">Foto depois 1</span>
@@ -79,10 +429,9 @@
               </label>
               <label class="photo-caption">
                 <span>Descrição da foto depois 1</span>
-                <textarea data-field="legendaDepois" rows="2" maxlength="300" placeholder="Ex.: Conexão substituída e vedada"></textarea>
+                <textarea data-field="legendaDepois" rows="2" maxlength="300" placeholder="Ex.: Conexão substituída e vedada, sem vazamento"></textarea>
               </label>
             </div>
-
             <div class="photo-slot">
               <label class="photo-input is-exit">
                 <span class="photo-input__label">Foto depois 2</span>
@@ -125,3 +474,8 @@
         </div>
       </article>
     </template>
+
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="/app.js?v=20260915-3"></script>
+  </body>
+</html>
