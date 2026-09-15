@@ -1,11 +1,12 @@
 {
   "name": "sistema-medicao",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check api/config.js && node --check api/generate.js && node --check api/health.js && node --check lib/report.js"
+    "usuario": "node scripts/usuarios.js",
+    "check": "node --check server.js && node --check app.js && node --check login.js && node --check api/config.js && node --check api/generate.js && node --check api/health.js && node --check api/login.js && node --check api/logout.js && node --check api/session.js && node --check lib/auth.js && node --check lib/report.js && node --check lib/brand-logo.js && node --check scripts/usuarios.js"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1"

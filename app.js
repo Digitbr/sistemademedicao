@@ -51,14 +51,64 @@ const state = {
   }
 };
 
-bindAddOccurrence();
-bindNavigation();
-bindDashboardFilters();
-bindRecordFilters();
-bindRecordActions();
-bindBackupActions();
-bindReportForm();
-initialize();
+startApp();
+
+async function startApp() {
+  const user = await requireSession();
+  if (!user) return;
+
+  renderSessionUser(user);
+  bindSessionActions();
+  bindAddOccurrence();
+  bindNavigation();
+  bindDashboardFilters();
+  bindRecordFilters();
+  bindRecordActions();
+  bindBackupActions();
+  bindReportForm();
+  initialize();
+}
+
+async function requireSession() {
+  try {
+    const response = await fetch("/api/session", {
+      credentials: "same-origin",
+      cache: "no-store"
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.user) return data.user;
+    }
+  } catch {
+    // Falha de rede: trata como sessão inválida.
+  }
+  redirectToLogin();
+  return null;
+}
+
+function redirectToLogin() {
+  window.location.replace("/login");
+}
+
+function renderSessionUser(user) {
+  const container = document.querySelector("#session-user");
+  if (!container) return;
+  document.querySelector("#session-user-name").textContent = user.name || user.email;
+  document.querySelector("#session-user-email").textContent = user.email;
+  container.hidden = false;
+}
+
+function bindSessionActions() {
+  const logoutButton = document.querySelector("#logout-button");
+  logoutButton?.addEventListener("click", async () => {
+    logoutButton.disabled = true;
+    try {
+      await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+    } finally {
+      redirectToLogin();
+    }
+  });
+}
 
 function currentDateInputValue(date = new Date()) {
   return [
@@ -1051,6 +1101,11 @@ async function exportSavedRecord(record, button, format = REPORT_FORMAT, options
       body: payload
     });
 
+    if (response.status === 401) {
+      redirectToLogin();
+      throw new Error("Sessão expirada. Entre novamente.");
+    }
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.error || "Falha ao gerar o relatório.");
@@ -1088,7 +1143,7 @@ async function exportSavedRecord(record, button, format = REPORT_FORMAT, options
       );
     } else if (emailStatus === "not-configured") {
       setFormMessage(
-        `${formatLabel} baixado, mas o envio por e-mail ainda não está configurado na Vercel. Configure RESEND_API_KEY e REPORT_FROM_EMAIL.`,
+        `${formatLabel} baixado, mas o envio por e-mail ainda não está configurado no servidor. Configure RESEND_API_KEY e REPORT_FROM_EMAIL.`,
         "warning"
       );
     } else {
@@ -1699,7 +1754,7 @@ async function fileToDataUrl(file) {
 
 async function getServiceConfig() {
   try {
-    const response = await fetch("/api/config");
+    const response = await fetch("/api/config", { credentials: "same-origin" });
     if (!response.ok) throw new Error("Configuração indisponível.");
     const config = await response.json();
     return {

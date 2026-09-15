@@ -8,7 +8,7 @@
       content="Geração e envio de relatórios fotográficos de manutenção."
     />
     <title>Sistema de Medição | Relatório Fotográfico</title>
-    <link rel="stylesheet" href="/styles.css?v=20260914-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260915-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -40,6 +40,16 @@
         </nav>
 
         <div class="sidebar__footer">
+          <div class="session-user" id="session-user" hidden>
+            <div class="session-user__info">
+              <strong id="session-user-name"></strong>
+              <span id="session-user-email"></span>
+            </div>
+            <button type="button" class="logout-button" id="logout-button">
+              <i data-lucide="log-out" aria-hidden="true"></i>
+              <span>Sair</span>
+            </button>
+          </div>
           <span class="service-status"><i></i> Sistema disponível</span>
           <small>Relatórios e medições</small>
         </div>
@@ -502,6 +512,6 @@
     </template>
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="/app.js?v=20260914-2"></script>
+    <script src="/app.js?v=20260915-1"></script>
   </body>
 </html>

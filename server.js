@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 import configHandler from "./api/config.js";
 import generateHandler from "./api/generate.js";
 import healthHandler from "./api/health.js";
+import loginHandler from "./api/login.js";
+import logoutHandler from "./api/logout.js";
+import sessionHandler from "./api/session.js";
+import { readSession } from "./lib/auth.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -15,15 +19,26 @@ const MAX_BODY_BYTES = 50 * 1024 * 1024;
 const API_ROUTES = {
   "/api/config": configHandler,
   "/api/generate": generateHandler,
-  "/api/health": healthHandler
+  "/api/health": healthHandler,
+  "/api/login": loginHandler,
+  "/api/logout": logoutHandler,
+  "/api/session": sessionHandler
 };
+
+// Rotas de API acessíveis sem sessão.
+const PUBLIC_API = new Set(["/api/health", "/api/login", "/api/logout"]);
 
 const STATIC_FILES = new Set([
   "/index.html",
   "/app.js",
   "/styles.css",
+  "/login.html",
+  "/login.js",
   "/favicon.ico"
 ]);
+
+// Arquivos que a tela de login precisa carregar antes de o usuário entrar.
+const PUBLIC_STATIC = new Set(["/login.html", "/login.js", "/styles.css", "/favicon.ico"]);
 
 const CONTENT_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -49,6 +64,12 @@ const server = http.createServer(async (request, response) => {
 
   const apiHandler = API_ROUTES[pathname];
   if (apiHandler) {
+    if (!PUBLIC_API.has(pathname) && !readSession(request)) {
+      response.setHeader("Cache-Control", "no-store");
+      response.status(401).json({ error: "Sessão expirada. Entre novamente." });
+      request.resume();
+      return;
+    }
     try {
       if (request.method === "POST" || request.method === "PUT") {
         request.body = await readJsonBody(request);
@@ -70,20 +91,43 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  await serveStatic(pathname, response);
+  await serveStatic(pathname, request, response);
 });
 
 server.listen(PORT, HOST, () => {
   console.log(`Sistema de Medição rodando em http://${HOST}:${PORT}`);
 });
 
-async function serveStatic(pathname, response) {
-  const requested = pathname === "/" ? "/index.html" : pathname;
-  if (!STATIC_FILES.has(requested)) {
-    await sendFile("/index.html", response, 200);
+async function serveStatic(pathname, request, response) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    response.setHeader("Allow", "GET, HEAD");
+    response.status(405).json({ error: "Método não permitido." });
     return;
   }
+
+  let requested = pathname === "/" ? "/index.html" : pathname;
+  if (requested === "/login") requested = "/login.html";
+  if (!STATIC_FILES.has(requested)) requested = "/index.html";
+
+  const user = readSession(request);
+
+  if (requested === "/login.html" && user) {
+    redirect(response, "/");
+    return;
+  }
+
+  if (!PUBLIC_STATIC.has(requested) && !user) {
+    redirect(response, "/login");
+    return;
+  }
+
   await sendFile(requested, response, 200);
+}
+
+function redirect(response, location) {
+  response.setHeader("Location", location);
+  response.setHeader("Cache-Control", "no-store");
+  response.status(302).end();
 }
 
 async function sendFile(requested, response, statusCode) {
@@ -99,8 +143,11 @@ async function sendFile(requested, response, statusCode) {
     response.setHeader("Content-Type", type);
     response.setHeader(
       "Cache-Control",
-      requested === "/index.html" ? "no-cache" : "public, max-age=3600"
+      requested.endsWith(".html") ? "no-store" : "public, max-age=3600"
     );
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Referrer-Policy", "same-origin");
+    if (requested.endsWith(".html")) response.setHeader("X-Frame-Options", "DENY");
     response.status(statusCode).end(body);
   } catch {
     response.status(404);

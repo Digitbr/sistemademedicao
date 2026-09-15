@@ -2337,3 +2337,268 @@ input[readonly] {
     margin-left: 0;
   }
 }
+
+/* Tela de login */
+.login-body {
+  min-height: 100vh;
+  background: #eef2f6;
+}
+
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(320px, 440px) 1fr;
+}
+
+.login-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 28px 32px;
+  background: #16242b;
+  color: #fff;
+}
+
+.login-aside .brand strong {
+  font-size: 16px;
+}
+
+.login-aside .brand small {
+  color: #aab8bd;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.login-aside .brand-mark,
+.login-form__brand .brand-mark {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  background: #2ba68b;
+  color: #fff;
+  font-size: 13px;
+}
+
+.login-aside__copy {
+  margin-top: auto;
+  display: grid;
+  gap: 12px;
+}
+
+.login-aside__eyebrow {
+  margin: 0;
+  color: #4fd1a8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.login-aside__copy h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.login-aside__copy p:last-child {
+  margin: 0;
+  color: #b7c3c7;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.login-aside__footer {
+  margin-top: auto;
+  color: #8fa0a6;
+  font-size: 11px;
+}
+
+.login-panel {
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+}
+
+.login-form {
+  width: min(400px, 100%);
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 32px 28px;
+  box-shadow: var(--shadow);
+}
+
+.login-form__brand {
+  display: none;
+}
+
+.login-form__brand strong {
+  color: var(--navy);
+}
+
+.login-form__brand small {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.login-form__heading h1 {
+  margin: 0 0 6px;
+  color: var(--navy);
+  font-size: 22px;
+}
+
+.login-form__heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.login-field {
+  display: grid;
+  gap: 7px;
+  color: #34425a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.login-field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #c5d0dc;
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px 12px;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.login-field input:focus {
+  outline: 3px solid rgb(22 117 169 / 18%);
+  border-color: var(--blue);
+}
+
+.login-password {
+  position: relative;
+  display: block;
+}
+
+.login-password input {
+  padding-right: 84px;
+}
+
+.login-password__toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 4px 10px;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.login-password__toggle:hover {
+  background: var(--blue-soft);
+}
+
+.login-message {
+  margin: 0;
+  border: 1px solid #e1bcbc;
+  border-radius: 7px;
+  background: #fff7f7;
+  padding: 10px 12px;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login-submit {
+  min-height: 46px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.login-submit:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+@media (max-width: 820px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .login-aside {
+    display: none;
+  }
+
+  .login-form__brand {
+    display: flex;
+  }
+}
+
+/* Usuário conectado (menu lateral) */
+.session-user {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+}
+
+.session-user__info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.session-user__info strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-user__info span {
+  overflow: hidden;
+  color: #aab8bd;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 6px;
+  background: transparent;
+  color: #dbe6e3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.logout-button:hover {
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+
+.logout-button .lucide {
+  width: 15px;
+  height: 15px;
+}

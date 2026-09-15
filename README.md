@@ -13,6 +13,22 @@ Aplicação web para cadastro, acompanhamento e exportação de medições e rel
 - Status de atividades concluídas ou em espera, com motivo obrigatório.
 - Exportação de relatórios em PDF (uma ocorrência por página).
 - Envio opcional do relatório por e-mail usando a Resend.
+- Tela de login: o sistema e a API só funcionam para usuários autenticados.
+- Logo do Grupo Autoglass no cabeçalho de cada página do PDF.
+
+## Acesso (login)
+
+As senhas não ficam no repositório. Cada servidor guarda os usuários em `data/users.json` (ignorado pelo Git), com a senha em hash scrypt. A chave que assina a sessão é criada automaticamente em `data/session-secret` na primeira execução.
+
+```bash
+node scripts/usuarios.js adicionar <email> <senha> [nome]
+node scripts/usuarios.js remover <email>
+node scripts/usuarios.js listar
+```
+
+Depois de adicionar ou remover usuários não é preciso reiniciar o servidor. A sessão dura 12 horas; após 5 tentativas erradas o login daquele e-mail fica bloqueado por 15 minutos.
+
+Em ambientes sem disco gravável (Vercel), configure as variáveis `AUTH_USERS` (JSON no mesmo formato de `data/users.json`) e `SESSION_SECRET` (mínimo de 32 caracteres). Sem elas, ninguém consegue entrar.
 
 ## Persistência
 
@@ -20,7 +36,7 @@ As medições ficam armazenadas no IndexedDB do navegador. Use `Exportar backup`
 
 ## Variáveis de ambiente
 
-Copie os nomes de `.env.example` para o ambiente da Vercel:
+Configure no ambiente do servidor (opcional):
 
 - `REPORT_RECIPIENT`: destinatário do relatório.
 - `RESEND_API_KEY`: chave da Resend para ativar o envio.
@@ -30,10 +46,13 @@ Sem `RESEND_API_KEY`, o relatório em PDF continua sendo gerado e baixado normal
 
 ## Executar localmente
 
-```powershell
+```bash
 npm install
-npx vercel dev
+node scripts/usuarios.js adicionar voce@empresa.com suaSenha
+npm start
 ```
+
+Acesse http://localhost:3000.
 
 ## Verificação
 
@@ -43,5 +62,6 @@ npm run check
 
 ## Produção
 
-https://sistema-medicao-phi.vercel.app/
+- Hostoo (principal): https://medicao.argosvig.com.br — código em `/public_html/medicao/app`, iniciado com `npm start`.
+- Vercel (backup): https://sistemademedicao.vercel.app
 
