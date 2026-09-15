@@ -636,21 +636,12 @@ function bindRecordActions() {
       return;
     }
 
-    if (action === "export") {
-      await exportSavedRecord(record, button);
-    }
-  });
-
-  const openRecordFromSummary = (event) => {
-    const button = event.target.closest("[data-open-record]");
-    if (!button) return;
-    setView("records");
-    const box = recordsList.querySelector(`[data-record-box="${CSS.escape(button.dataset.openRecord)}"]`);
-    if (box) {
-      box.open = true;
-      box.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  };
+    // Configura a extensão correta com base no formato
+    let extensao = format;
+    if (format === 'docx') extensao = 'docx';
+    else if (format === 'pptx') extensao = 'pptx';
+    else if (format === 'xlsx') extensao = 'xlsx'; // Adicione o Excel aqui
+    else extensao = 'pdf';
 
   dashboardContent.addEventListener("click", openRecordFromSummary);
   operationsContent.addEventListener("click", openRecordFromSummary);
@@ -1621,6 +1612,12 @@ function reportFormatLabel(format) {
   if (format === "pptx") return "PowerPoint";
   if (format === "docx") return "Word";
   return "PDF";
+  function reportFormatLabel(format) {
+  if (format === "pptx") return "PowerPoint";
+  if (format === "docx") return "Word";
+  if (format === "xlsx") return "Excel";
+  return "PDF";
+}
 }
 
 function updateGenerateButton() {
