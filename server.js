@@ -1,4 +1,5 @@
 import http from "node:http";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,8 +13,20 @@ import sessionHandler from "./api/session.js";
 import { readSession } from "./lib/auth.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT) || 3000;
-const HOST = process.env.HOST || "0.0.0.0";
+
+// Carrega variáveis de um .env ao lado do server.js, se existir (Hostoo).
+try {
+  const envFile = path.join(ROOT, ".env");
+  if (typeof process.loadEnvFile === "function" && existsSync(envFile)) {
+    process.loadEnvFile(envFile);
+  }
+} catch (error) {
+  console.warn("Não foi possível carregar o .env:", error.message);
+}
+
+// Na Hostoo o Apache repassa medicao.argosvig.com.br para 127.0.0.1:3210.
+const PORT = Number(process.env.PORT) || 3210;
+const HOST = process.env.HOST || "127.0.0.1";
 const MAX_BODY_BYTES = 50 * 1024 * 1024;
 
 const API_ROUTES = {

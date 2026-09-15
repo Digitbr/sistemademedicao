@@ -52,7 +52,7 @@ node scripts/usuarios.js adicionar voce@empresa.com suaSenha
 npm start
 ```
 
-Acesse http://localhost:3000.
+Acesse http://localhost:3210.
 
 ## Verificação
 
