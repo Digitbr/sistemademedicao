@@ -111,3 +111,19 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+// Dentro do seu arquivo lib/report.js
+export async function buildReport(payload) {
+  const metadata = normalizeMetadata(payload?.metadata);
+  const activities = normalizeActivities(payload?.activities);
+  const format = payload?.format || "pdf"; // pdf é o padrão
+
+  validateReport(metadata, activities);
+
+  if (format === "pptx") {
+    return buildPptxReport(metadata, activities);
+  } else if (format === "docx") {
+    return buildWordReport(metadata, activities);
+  } else {
+    return buildPdfReport(metadata, activities);
+  }
+}
