@@ -1,4 +1,5 @@
 import { requireUser } from "../lib/auth.js";
+import { resolveAttachments } from "../lib/attachments.js";
 import { buildReport } from "../lib/report.js";
 
 const DEFAULT_RECIPIENT = "comercial1@primecsg.com.br";
@@ -23,6 +24,7 @@ export default async function handler(request, response) {
   try {
     const payload =
       typeof request.body === "string" ? JSON.parse(request.body) : request.body;
+    payload.activities = await resolveAttachments(payload?.activities);
     const report = await buildReport(payload);
     const recipient = reportRecipient(payload);
     const emailStatus = await sendReportEmail(report, recipient);
@@ -110,36 +112,4 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-// Dentro do seu arquivo lib/report.js
-export async function buildReport(payload) {
-  const metadata = normalizeMetadata(payload?.metadata);
-  const activities = normalizeActivities(payload?.activities);
-  const format = payload?.format || "pdf"; // pdf é o padrão
-
-  validateReport(metadata, activities);
-
-  if (format === "pptx") {
-    return buildPptxReport(metadata, activities);
-  } else if (format === "docx") {
-    return buildWordReport(metadata, activities);
-  } else {
-    return buildPdfReport(metadata, activities);
-  }
-}
-// Dentro do seu arquivo lib/report.js
-export async function buildReport(payload) {
-  const metadata = normalizeMetadata(payload?.metadata);
-  const activities = normalizeActivities(payload?.activities);
-  const format = payload?.format || "pdf"; // pdf é o padrão
-
-  validateReport(metadata, activities);
-
-  if (format === "pptx") {
-    return buildPptxReport(metadata, activities);
-  } else if (format === "docx") {
-    return buildWordReport(metadata, activities);
-  } else {
-    return buildPdfReport(metadata, activities);
-  }
 }
