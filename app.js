@@ -280,6 +280,9 @@ function createActivityCard(data) {
     PHOTO_FIELDS.map((name) => [name, Promise.resolve()])
   );
   let savedRecordId = "";
+  // Ocorrência aberta a partir de uma medição com várias ocorrências:
+  // ao salvar, atualiza a ocorrência dentro dessa medição.
+  let parentLink = null;
 
   const setNumber = (position) => {
     number.textContent = String(position).padStart(2, "0");
@@ -421,6 +424,7 @@ function createActivityCard(data) {
     for (const field of Object.values(fields)) {
       field.value = field.dataset.field === "status" ? "concluida" : "";
     }
+    parentLink = null;
     setSavedRecordId("");
     applyDefaultDates();
     syncMaintenanceType();
@@ -449,9 +453,15 @@ function createActivityCard(data) {
     syncMaintenanceType();
     setStatus(activity.status === "em-espera" ? "em-espera" : "concluida");
     setSavedRecordId(activity.recordId || "");
-    if (savedRecordId && occurrenceSaveStatus) {
+    parentLink = activity.parentRecordId
+      ? { recordId: activity.parentRecordId, index: Number(activity.parentActivityIndex) || 0 }
+      : null;
+    if ((savedRecordId || parentLink) && occurrenceSaveStatus) {
       occurrenceSaveStatus.textContent =
         "Ocorrência carregada para atualização individual.";
+    }
+    if (parentLink && saveOccurrenceButton) {
+      saveOccurrenceButton.textContent = "Atualizar ocorrência";
     }
   };
 
@@ -541,6 +551,7 @@ function createActivityCard(data) {
     syncMaintenanceType,
     updateSummary,
     getSavedRecordId: () => savedRecordId,
+    getParentLink: () => parentLink,
     getPhotoErrors: () => ({ ...photoErrors }),
     setSavedRecordId
   };
@@ -838,13 +849,15 @@ function loadRecordIntoForm(record, options = {}) {
   clearOccurrenceCards();
   const activities = filledActivities(record);
   const list = activities.length ? activities : [{}];
-  list.forEach((activityData) => {
+  list.forEach((activityData, index) => {
     addOccurrenceCard(
       {
         ...activityData,
         ordemServico:
           activityData.ordemServico || record.metadata.ordemServico || "",
-        recordId: list.length === 1 ? record.id : ""
+        recordId: list.length === 1 ? record.id : "",
+        parentRecordId: list.length > 1 ? record.id : "",
+        parentActivityIndex: index
       },
       { focus: false }
     );
@@ -915,32 +928,45 @@ async function saveOccurrenceFromCard(activityCard) {
 
   activity.ordemServico = order;
 
-  const existing =
-    state.records.find((record) => record.id === activityCard.getSavedRecordId()) ||
-    state.records.find(
-      (record) =>
-        normalizeText(record.metadata?.ordemServico) === normalizeText(order) &&
-        filledActivities(record).length === 1
-    );
   const now = new Date().toISOString();
-  const record = {
-    id: existing?.id || crypto.randomUUID(),
-    metadata: {
-      competencia: String(formData.get("competencia") || "").trim(),
-      ordemServico: order,
-      contratada: String(formData.get("contratada") || "").trim(),
-      tipoManutencao: String(formData.get("tipoManutencao") || "").trim()
-    },
-    activities: [activity],
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-    lastExportedAt: existing?.lastExportedAt || "",
-    lastExportFormat: existing?.lastExportFormat || ""
-  };
+  const parentLink = activityCard.getParentLink?.();
+  const parent = parentLink
+    ? state.records.find((item) => item.id === parentLink.recordId)
+    : null;
+  const parentTarget = parent ? filledActivities(parent)[parentLink.index] : null;
+  const parentPosition = parentTarget ? parent.activities.indexOf(parentTarget) : -1;
+
+  let record;
+  if (parent && parentPosition >= 0) {
+    // Atualiza só esta ocorrência dentro da medição de origem.
+    parent.activities[parentPosition] = activity;
+    parent.updatedAt = now;
+    record = parent;
+  } else {
+    // Só atualiza o registro criado por este mesmo cartão; uma ocorrência nova
+    // sempre gera um registro novo, mesmo que a OS se repita.
+    const existing = state.records.find(
+      (item) => item.id === activityCard.getSavedRecordId()
+    );
+    record = {
+      id: existing?.id || crypto.randomUUID(),
+      metadata: {
+        competencia: String(formData.get("competencia") || "").trim(),
+        ordemServico: order,
+        contratada: String(formData.get("contratada") || "").trim(),
+        tipoManutencao: String(formData.get("tipoManutencao") || "").trim()
+      },
+      activities: [activity],
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      lastExportedAt: existing?.lastExportedAt || "",
+      lastExportFormat: existing?.lastExportFormat || ""
+    };
+  }
 
   await putRecord(record);
   upsertStateRecord(record);
-  activityCard.setSavedRecordId(record.id);
+  if (record !== parent) activityCard.setSavedRecordId(record.id);
   renderAllDataViews();
   const photoWarning = photoErrorSummary([activityCard]);
   setFormMessage(
@@ -949,7 +975,7 @@ async function saveOccurrenceFromCard(activityCard) {
       : `Ocorrência ${recordLabel(record)} salva individualmente.`,
     photoWarning ? "warning" : "success"
   );
-  return record;
+  return { record, activity };
 }
 
 function photoErrorSummary(entries = activityCards) {
@@ -974,12 +1000,19 @@ async function exportOccurrenceFromCard(activityCard, button) {
   button.textContent = "Preparando...";
 
   try {
-    const record = await saveOccurrenceFromCard(activityCard);
-    if (!record) return;
+    const saved = await saveOccurrenceFromCard(activityCard);
+    if (!saved) return;
     button.textContent = "Exportando...";
-    await exportSavedRecord(record, button, REPORT_FORMAT, {
-      successMessage: "PDF individual da ocorrência baixado com sucesso."
-    });
+    const { record, activity } = saved;
+    await exportSavedRecord(
+      { ...record, activities: [activity] },
+      button,
+      REPORT_FORMAT,
+      {
+        successMessage: "PDF individual da ocorrência baixado com sucesso.",
+        touchRecord: record
+      }
+    );
     const photoWarning = photoErrorSummary([activityCard]);
     if (photoWarning) setFormMessage(`PDF baixado, mas ${photoWarning}`, "warning");
   } finally {
@@ -1113,35 +1146,19 @@ reportForm.addEventListener("submit", async (event) => {
 
 async function exportSavedActivity(parentRecord, activity, button, format = REPORT_FORMAT) {
   const order = String(activity.ordemServico || parentRecord.metadata?.ordemServico || "").trim();
-  const now = new Date().toISOString();
-  const existing = state.records.find(
-    (record) =>
-      normalizeText(record.metadata?.ordemServico) === normalizeText(order) &&
-      filledActivities(record).length === 1
-  );
-  const individualRecord = {
-    id: existing?.id || crypto.randomUUID(),
-    metadata: {
-      ...parentRecord.metadata,
-      ordemServico: order || parentRecord.metadata?.ordemServico || ""
+  await exportSavedRecord(
+    {
+      ...parentRecord,
+      metadata: { ...parentRecord.metadata, ordemServico: order },
+      activities: [{ ...activity, ordemServico: order }]
     },
-    activities: [
-      {
-        ...activity,
-        ordemServico: order || activity.ordemServico || parentRecord.metadata?.ordemServico || ""
-      }
-    ],
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-    lastExportedAt: existing?.lastExportedAt || "",
-    lastExportFormat: existing?.lastExportFormat || ""
-  };
-
-  await putRecord(individualRecord);
-  upsertStateRecord(individualRecord);
-  await exportSavedRecord(individualRecord, button, format, {
-    successMessage: "PDF individual da ocorrência baixado com sucesso."
-  });
+    button,
+    format,
+    {
+      successMessage: "PDF individual da ocorrência baixado com sucesso.",
+      touchRecord: parentRecord
+    }
+  );
 }
 
 async function exportSavedRecord(record, button, format = REPORT_FORMAT, options = {}) {
@@ -1191,11 +1208,14 @@ async function exportSavedRecord(record, button, format = REPORT_FORMAT, options
     anchor.remove();
     URL.revokeObjectURL(downloadUrl);
 
-    record.lastExportedAt = new Date().toISOString();
-    record.lastExportFormat = format;
-    record.updatedAt = record.lastExportedAt;
-    await putRecord(record);
-    upsertStateRecord(record);
+    // Marca a exportação no registro salvo (a cópia usada no PDF de uma
+    // ocorrência isolada nunca é gravada no lugar dele).
+    const exportedRecord = options.touchRecord || record;
+    exportedRecord.lastExportedAt = new Date().toISOString();
+    exportedRecord.lastExportFormat = format;
+    exportedRecord.updatedAt = exportedRecord.lastExportedAt;
+    await putRecord(exportedRecord);
+    upsertStateRecord(exportedRecord);
     renderAllDataViews();
 
     if (emailStatus === "sent") {
@@ -1806,12 +1826,8 @@ function updateProgress() {
 
 async function fileToDataUrl(file) {
   if (!file) return "";
-  const isImage =
-    String(file.type || "").startsWith("image/") ||
-    /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i.test(file.name || "");
-  if (!isImage) {
-    throw new Error("o arquivo escolhido não é uma imagem.");
-  }
+  // Não confia no tipo informado: alguns celulares entregam a foto sem tipo
+  // ou sem extensão. Se o navegador conseguir abrir, a foto é aceita.
   if (file.size > MAX_PHOTO_BYTES) {
     throw new Error("a imagem passa de 30 MB. Escolha uma foto menor.");
   }
