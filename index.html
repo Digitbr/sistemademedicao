@@ -8,7 +8,7 @@
       content="Geração e envio de relatórios fotográficos de manutenção."
     />
     <title>Sistema de Medição | Relatório Fotográfico</title>
-    <link rel="stylesheet" href="/styles.css?v=20260915-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260915-3" />
   </head>
   <body>
     <div class="app-shell">
@@ -378,19 +378,20 @@
           </div>
 
           <div class="photo-grid">
+            <p class="photo-row-title is-entry">Antes do serviço</p>
             <div class="photo-slot">
               <label class="photo-input is-entry">
-                <span class="photo-input__label">Foto de entrada 1</span>
+                <span class="photo-input__label">Foto antes 1</span>
                 <input
                   type="file"
                   accept="image/*"
                   data-field="fotoAntes"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto de entrada 1" />
+                <img alt="Prévia da foto antes 1" />
               </label>
               <label class="photo-caption">
-                <span>Descrição da foto de entrada 1</span>
+                <span>Descrição da foto antes 1</span>
                 <textarea
                   data-field="legendaAntes"
                   rows="2"
@@ -400,18 +401,40 @@
               </label>
             </div>
             <div class="photo-slot">
+              <label class="photo-input is-entry">
+                <span class="photo-input__label">Foto antes 2</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  data-field="fotoAntes2"
+                />
+                <span class="photo-input__action">Selecionar imagem</span>
+                <img alt="Prévia da foto antes 2" />
+              </label>
+              <label class="photo-caption">
+                <span>Descrição da foto antes 2</span>
+                <textarea
+                  data-field="legendaAntes2"
+                  rows="2"
+                  maxlength="300"
+                  placeholder="Ex.: Outro ângulo do problema encontrado"
+                ></textarea>
+              </label>
+            </div>
+            <p class="photo-row-title is-exit">Depois do serviço</p>
+            <div class="photo-slot">
               <label class="photo-input is-exit">
-                <span class="photo-input__label">Foto de saída 1</span>
+                <span class="photo-input__label">Foto depois 1</span>
                 <input
                   type="file"
                   accept="image/*"
                   data-field="fotoDepois"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto de saída 1" />
+                <img alt="Prévia da foto depois 1" />
               </label>
               <label class="photo-caption">
-                <span>Descrição da foto de saída 1</span>
+                <span>Descrição da foto depois 1</span>
                 <textarea
                   data-field="legendaDepois"
                   rows="2"
@@ -421,39 +444,18 @@
               </label>
             </div>
             <div class="photo-slot">
-              <label class="photo-input is-entry">
-                <span class="photo-input__label">Foto de entrada 2</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  data-field="fotoAntes2"
-                />
-                <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto de entrada 2" />
-              </label>
-              <label class="photo-caption">
-                <span>Descrição da foto de entrada 2</span>
-                <textarea
-                  data-field="legendaAntes2"
-                  rows="2"
-                  maxlength="300"
-                  placeholder="Ex.: Outro ângulo do problema encontrado"
-                ></textarea>
-              </label>
-            </div>
-            <div class="photo-slot">
               <label class="photo-input is-exit">
-                <span class="photo-input__label">Foto de saída 2</span>
+                <span class="photo-input__label">Foto depois 2</span>
                 <input
                   type="file"
                   accept="image/*"
                   data-field="fotoDepois2"
                 />
                 <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto de saída 2" />
+                <img alt="Prévia da foto depois 2" />
               </label>
               <label class="photo-caption">
-                <span>Descrição da foto de saída 2</span>
+                <span>Descrição da foto depois 2</span>
                 <textarea
                   data-field="legendaDepois2"
                   rows="2"
@@ -508,6 +510,6 @@
     </template>
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="/app.js?v=20260915-2"></script>
+    <script src="/app.js?v=20260915-3"></script>
   </body>
 </html>

@@ -47,7 +47,8 @@ const STATIC_FILES = new Set([
   "/styles.css",
   "/login.html",
   "/login.js",
-  "/favicon.ico"
+  "/favicon.ico",
+  "/assets/logo-grupo-autoglass.png"
 ]);
 
 // Arquivos que a tela de login precisa carregar antes de o usuário entrar.

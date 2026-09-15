@@ -6,10 +6,10 @@ const REPORT_FORMAT = "pdf";
 const MAX_ACTIVITIES = 20;
 const MAX_PHOTO_BYTES = 30 * 1024 * 1024;
 const PHOTO_LABELS = {
-  fotoAntes: "A foto de entrada 1",
-  fotoDepois: "A foto de saída 1",
-  fotoAntes2: "A foto de entrada 2",
-  fotoDepois2: "A foto de saída 2"
+  fotoAntes: "A foto antes 1",
+  fotoAntes2: "A foto antes 2",
+  fotoDepois: "A foto depois 1",
+  fotoDepois2: "A foto depois 2"
 };
 
 const activityContainer = document.querySelector("#activities");
@@ -273,7 +273,7 @@ function createActivityCard(data) {
       input
     ])
   );
-  const PHOTO_FIELDS = ["fotoAntes", "fotoDepois", "fotoAntes2", "fotoDepois2"];
+  const PHOTO_FIELDS = ["fotoAntes", "fotoAntes2", "fotoDepois", "fotoDepois2"];
   const photos = Object.fromEntries(PHOTO_FIELDS.map((name) => [name, ""]));
   const photoErrors = {};
   const photoPromises = Object.fromEntries(
@@ -821,7 +821,7 @@ function resetForm() {
   renderFormWaitingReminders();
   reportPageTitle.textContent = "Nova medição de serviço";
   reportPageDescription.textContent =
-    "Preencha os dados, registre o problema, adicione as fotos de entrada e saída e gere o relatório.";
+    "Preencha os dados, registre o problema, adicione as fotos de antes e depois e gere o relatório.";
   saveRecordButton.textContent = "Salvar medição";
   setFormMessage("Salve a medição ou gere o relatório em PDF.");
 }
@@ -1365,6 +1365,10 @@ function recordBox(record) {
         <span class="record-date">${formatDate(record.updatedAt)}</span>
       </summary>
       <div class="record-box__content">
+        <div class="record-brand">
+          <img src="/assets/logo-grupo-autoglass.png?v=20260915" alt="Grupo Autoglass" width="915" height="113" loading="lazy" />
+          <span>Relatório fotográfico de manutenção</span>
+        </div>
         <div class="record-metadata">
           ${metadataItem("Ordem de serviço", record.metadata.ordemServico || "Não informada")}
           ${metadataItem("Contratada", record.metadata.contratada || "Não informada")}
@@ -1415,27 +1419,52 @@ function recordActivity(activity, index, record = null) {
 }
 
 function savedPhotoGallery(activity) {
-  const photos = [
-    { label: "Entrada 1", src: activity.fotoAntes, caption: activity.legendaAntes },
-    { label: "Saída 1", src: activity.fotoDepois, caption: activity.legendaDepois },
-    { label: "Entrada 2", src: activity.fotoAntes2, caption: activity.legendaAntes2 },
-    { label: "Saída 2", src: activity.fotoDepois2, caption: activity.legendaDepois2 }
-  ].filter((photo) => photo.src);
+  const rows = [
+    {
+      title: "Antes",
+      tone: "is-entry",
+      photos: [
+        { label: "Antes 1", src: activity.fotoAntes, caption: activity.legendaAntes },
+        { label: "Antes 2", src: activity.fotoAntes2, caption: activity.legendaAntes2 }
+      ]
+    },
+    {
+      title: "Depois",
+      tone: "is-exit",
+      photos: [
+        { label: "Depois 1", src: activity.fotoDepois, caption: activity.legendaDepois },
+        { label: "Depois 2", src: activity.fotoDepois2, caption: activity.legendaDepois2 }
+      ]
+    }
+  ]
+    .map((row) => ({ ...row, photos: row.photos.filter((photo) => photo.src) }))
+    .filter((row) => row.photos.length);
 
-  if (!photos.length) return "";
+  if (!rows.length) return "";
 
   return `
-    <div class="saved-photos">
-      ${photos
+    <div class="saved-photo-rows">
+      ${rows
         .map(
-          (photo) => `
-            <figure>
-              <img src="${escapeAttr(photo.src)}" alt="${escapeAttr(photo.label)}">
-              <figcaption>
-                <strong>${escapeHtml(photo.label)}</strong>
-                ${photo.caption ? `<span>${escapeHtml(photo.caption)}</span>` : ""}
-              </figcaption>
-            </figure>
+          (row) => `
+            <div class="saved-photo-row ${row.tone}">
+              <span class="saved-photo-row__title">${escapeHtml(row.title)}</span>
+              <div class="saved-photos">
+                ${row.photos
+                  .map(
+                    (photo) => `
+                      <figure>
+                        <img src="${escapeAttr(photo.src)}" alt="${escapeAttr(photo.label)}">
+                        <figcaption>
+                          <strong>${escapeHtml(photo.label)}</strong>
+                          ${photo.caption ? `<span>${escapeHtml(photo.caption)}</span>` : ""}
+                        </figcaption>
+                      </figure>
+                    `
+                  )
+                  .join("")}
+              </div>
+            </div>
           `
         )
         .join("")}

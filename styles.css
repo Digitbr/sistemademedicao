@@ -2326,14 +2326,68 @@ input[readonly] {
   height: 128px;
 }
 
-.saved-photos {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  max-width: 880px;
+/* ---------- Fotos: Antes (em cima) e Depois (embaixo) ---------- */
+.photo-row-title {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 -6px;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-@media (max-width: 900px) {
-  .saved-photos {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.photo-row-title::before {
+  content: "";
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: #82a8c2;
+}
+
+.photo-row-title.is-exit::before {
+  background: #8bbca6;
+}
+
+.saved-photo-rows {
+  display: grid;
+  gap: 12px;
+  max-width: 620px;
+  margin: 12px 0 0 40px;
+}
+
+.saved-photo-row {
+  display: grid;
+  gap: 6px;
+}
+
+.saved-photo-row__title {
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.saved-photo-row.is-entry .saved-photo-row__title {
+  color: #2f6d93;
+}
+
+.saved-photo-row.is-exit .saved-photo-row__title {
+  color: #2d7a57;
+}
+
+.saved-photo-rows .saved-photos {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: none;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .saved-photo-rows {
     margin-left: 0;
   }
 }
@@ -2614,4 +2668,37 @@ input[readonly] {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
+}
+
+/* Logo do Grupo Autoglass no registro salvo */
+.record-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 14px;
+  border-bottom: 3px solid #2021d4;
+  padding-bottom: 12px;
+}
+
+.record-brand img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: 28px;
+}
+
+.record-brand span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 480px) {
+  .record-brand img {
+    height: 22px;
+  }
 }

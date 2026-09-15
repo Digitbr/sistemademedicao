@@ -8,7 +8,7 @@ Aplicação web para cadastro, acompanhamento e exportação de medições e rel
 - Visão operacional de pendências, responsáveis e exportações.
 - Registros editáveis, pesquisáveis e organizados em caixas.
 - Ocorrências adicionadas sob demanda pelo botão "+", com edição e exclusão individual.
-- Até quatro fotos por ocorrência (duas de entrada e duas de saída), cada uma com descrição editável.
+- Até quatro fotos por ocorrência: duas de "Antes" (em cima) e duas de "Depois" (embaixo), cada uma com descrição editável.
 - Backup e restauração do histórico local em JSON.
 - Status de atividades concluídas ou em espera, com motivo obrigatório.
 - Exportação de relatórios em PDF (uma ocorrência por página).
