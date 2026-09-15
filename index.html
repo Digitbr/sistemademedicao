@@ -351,7 +351,6 @@
       ></button>
     </div>
 
-    <!-- TEMPLATE ORIGINAL DAS OCORRÊNCIAS COM OS CAMPOS DE FOTO E LEGENDA -->
     <template id="activity-template">
       <article class="activity-card">
         <button type="button" class="activity-card__header">
@@ -437,88 +436,6 @@
               </label>
             </div>
 
-            <div class="photo-slot">
-              <label class="photo-input is-exit">
-                <span class="photo-input__label">Foto depois 2</span>
-                <input type="file" accept="image/*" data-field="fotoDepois2" />
-                <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto depois 2" />
-              </label>
-              <label class="photo-caption">
-                <span>Descrição da foto depois 2</span>
-                <textarea data-field="legendaDepois2" rows="2" maxlength="300" placeholder="Ex.: Outro ângulo do serviço concluído"></textarea>
-              </label>
-            </div>
-          </div>
-
-          <div class="activity-control">
-            <div>
-              <span class="field-label">Situação da atividade</span>
-              <div class="status-control" role="group" aria-label="Situação da atividade">
-                <button type="button" class="status-option is-active" data-status="concluida">Concluída</button>
-                <button type="button" class="status-option" data-status="em-espera">Em espera</button>
-              </div>
-              <input type="hidden" data-field="status" value="concluida" />
-            </div>
-
-            <label class="waiting-reason-field" hidden>
-              <span>Motivo da espera</span>
-              <textarea data-field="motivo" rows="2" placeholder="Explique o que falta para concluir este serviço"></textarea>
-            </label>
-
-            <div class="occurrence-save-panel">
-              <span data-occurrence-save-status>Ocorrência ainda não salva individualmente.</span>
-              <div>
-                <button type="button" class="secondary-action" data-save-occurrence>Salvar ocorrência</button>
-                <button type="button" class="secondary-action" data-export-occurrence>Exportar PDF</button>
-                <button type="button" class="clear-activity">Limpar campos</button>
-                <button type="button" class="remove-activity" data-remove-occurrence>Excluir ocorrência</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
-    </template>
-          <!-- ESPAÇOS DE IMAGENS E DESCRIÇÕES -->
-          <div class="photo-grid">
-            <p class="photo-row-title is-entry">Antes do serviço</p>
-            <div class="photo-slot">
-              <label class="photo-input is-entry">
-                <span class="photo-input__label">Foto antes 1</span>
-                <input type="file" accept="image/*" data-field="fotoAntes" />
-                <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto antes 1" />
-              </label>
-              <label class="photo-caption">
-                <span>Descrição da foto antes 1</span>
-                <textarea data-field="legendaAntes" rows="2" maxlength="300" placeholder="Ex.: Vazamento na conexão de saída do reservatório"></textarea>
-              </label>
-            </div>
-            <div class="photo-slot">
-              <label class="photo-input is-entry">
-                <span class="photo-input__label">Foto antes 2</span>
-                <input type="file" accept="image/*" data-field="fotoAntes2" />
-                <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto antes 2" />
-              </label>
-              <label class="photo-caption">
-                <span>Descrição da foto antes 2</span>
-                <textarea data-field="legendaAntes2" rows="2" maxlength="300" placeholder="Ex.: Outro ângulo do problema encontrado"></textarea>
-              </label>
-            </div>
-            <p class="photo-row-title is-exit">Depois do serviço</p>
-            <div class="photo-slot">
-              <label class="photo-input is-exit">
-                <span class="photo-input__label">Foto depois 1</span>
-                <input type="file" accept="image/*" data-field="fotoDepois" />
-                <span class="photo-input__action">Selecionar imagem</span>
-                <img alt="Prévia da foto depois 1" />
-              </label>
-              <label class="photo-caption">
-                <span>Descrição da foto depois 1</span>
-                <textarea data-field="legendaDepois" rows="2" maxlength="300" placeholder="Ex.: Conexão substituída e vedada, sem vazamento"></textarea>
-              </label>
-            </div>
             <div class="photo-slot">
               <label class="photo-input is-exit">
                 <span class="photo-input__label">Foto depois 2</span>
