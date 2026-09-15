@@ -28,7 +28,7 @@ node scripts/usuarios.js listar
 
 Depois de adicionar ou remover usuários não é preciso reiniciar o servidor. A sessão dura 12 horas; após 5 tentativas erradas o login daquele e-mail fica bloqueado por 15 minutos.
 
-Em ambientes sem disco gravável (Vercel), configure as variáveis `AUTH_USERS` (JSON no mesmo formato de `data/users.json`) e `SESSION_SECRET` (mínimo de 32 caracteres). Sem elas, ninguém consegue entrar.
+Em ambientes sem disco gravável (Vercel), configure a variável `AUTH_USERS` com o JSON no mesmo formato de `data/users.json` (gere com `node scripts/usuarios.js adicionar ...` e copie o conteúdo do arquivo). `SESSION_SECRET` é opcional; sem ela, a chave de sessão é derivada de `AUTH_USERS`. Sem `AUTH_USERS`, ninguém consegue entrar.
 
 ## Persistência
 
