@@ -1716,12 +1716,19 @@ input[readonly] {
 
 .records-toolbar {
   grid-template-columns:
-    minmax(240px, 1.4fr)
-    minmax(160px, 0.8fr)
-    minmax(170px, 0.8fr)
-    minmax(150px, 0.65fr)
+    minmax(220px, 1.3fr)
+    minmax(150px, 0.75fr)
+    minmax(160px, 0.75fr)
+    minmax(140px, 0.6fr)
+    minmax(180px, 0.8fr)
     auto;
   align-items: end;
+}
+
+@media (min-width: 761px) and (max-width: 1180px) {
+  .records-toolbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .records-toolbar__summary {
@@ -2700,5 +2707,150 @@ input[readonly] {
 @media (max-width: 480px) {
   .record-brand img {
     height: 22px;
+  }
+}
+
+/* Documentos anexados nos campos de foto */
+.photo-input.has-document .photo-input__action {
+  display: none;
+}
+
+.document-chip,
+.saved-document {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 128px;
+  border-radius: 6px;
+  background: #e9eef3;
+  padding: 10px;
+  color: var(--navy);
+  text-align: center;
+  text-decoration: none;
+}
+
+.document-chip strong,
+.saved-document strong {
+  border-radius: 5px;
+  background: var(--navy);
+  padding: 4px 8px;
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.document-chip span,
+.saved-document span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-document {
+  aspect-ratio: 2 / 1;
+  min-height: 0;
+  border: 1px solid var(--line);
+}
+
+.photo-input.is-uploading::after {
+  content: "Enviando...";
+  position: absolute;
+  inset: auto 12px 12px auto;
+  border-radius: 5px;
+  background: var(--navy);
+  padding: 3px 8px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Aviso informativo na caixa do anexo */
+.photo-notice {
+  margin: 0;
+  border: 1px solid #e6d3a8;
+  border-radius: 6px;
+  background: #fffaf0;
+  padding: 7px 10px;
+  color: #7a4d06;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* Escolha do formato do relatório (PDF, Excel, PowerPoint, Word) */
+.format-switch {
+  display: grid;
+  gap: 4px;
+}
+
+.format-switch__label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.format-switch__options {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.format-switch__options button {
+  min-height: 42px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  padding: 8px 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.format-switch__options button:last-child {
+  border-right: 0;
+}
+
+.format-switch__options button:hover {
+  background: #f2f5f4;
+}
+
+.format-switch__options button.is-active {
+  background: var(--navy);
+  color: #fff;
+}
+
+.format-switch__options button:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: -2px;
+}
+
+@media (max-width: 760px) {
+  .format-switch__options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .format-switch__options button {
+    padding-inline: 4px;
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 761px) {
+  .submit-actions {
+    flex-wrap: wrap;
+  }
+
+  .submit-actions > .secondary-action {
+    white-space: nowrap;
   }
 }

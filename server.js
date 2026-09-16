@@ -10,6 +10,8 @@ import healthHandler from "./api/health.js";
 import loginHandler from "./api/login.js";
 import logoutHandler from "./api/logout.js";
 import sessionHandler from "./api/session.js";
+import recordsHandler from "./api/records.js";
+import filesHandler from "./api/files.js";
 import { readSession } from "./lib/auth.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -35,7 +37,9 @@ const API_ROUTES = {
   "/api/health": healthHandler,
   "/api/login": loginHandler,
   "/api/logout": logoutHandler,
-  "/api/session": sessionHandler
+  "/api/session": sessionHandler,
+  "/api/records": recordsHandler,
+  "/api/files": filesHandler
 };
 
 // Rotas de API acessíveis sem sessão.
@@ -86,7 +90,9 @@ const server = http.createServer(async (request, response) => {
     }
     try {
       if (request.method === "POST" || request.method === "PUT") {
-        request.body = await readJsonBody(request);
+        const raw = await readRawBody(request);
+        request.rawBody = raw;
+        request.body = pathname === "/api/files" ? {} : parseJson(raw);
       }
       await apiHandler(request, response);
     } catch (error) {
@@ -170,7 +176,7 @@ async function sendFile(requested, response, statusCode) {
   }
 }
 
-function readJsonBody(request) {
+function readRawBody(request) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
@@ -188,22 +194,19 @@ function readJsonBody(request) {
     });
 
     request.on("error", reject);
-
-    request.on("end", () => {
-      if (!chunks.length) {
-        resolve({});
-        return;
-      }
-      const raw = Buffer.concat(chunks).toString("utf8");
-      try {
-        resolve(JSON.parse(raw));
-      } catch {
-        const error = new Error("JSON inválido.");
-        error.statusCode = 400;
-        reject(error);
-      }
-    });
+    request.on("end", () => resolve(Buffer.concat(chunks)));
   });
+}
+
+function parseJson(raw) {
+  if (!raw.length) return {};
+  try {
+    return JSON.parse(raw.toString("utf8"));
+  } catch {
+    const error = new Error("JSON inválido.");
+    error.statusCode = 400;
+    throw error;
+  }
 }
 
 function decorateResponse(response) {

@@ -2,9 +2,19 @@ const DB_NAME = "sistema-medicao-db";
 const DB_VERSION = 1;
 const RECORD_STORE = "records";
 const DEFAULT_CONTRACTOR = "FLASH LOCAÇÃO DE MÃO DE OBRA";
-const REPORT_FORMAT = "pdf";
+const REPORT_FORMATS = {
+  pdf: { label: "PDF", option: "PDF (.pdf)" },
+  xlsx: { label: "Excel", option: "Excel (.xlsx)" },
+  pptx: { label: "PowerPoint", option: "PowerPoint (.pptx)" },
+  docx: { label: "Word", option: "Word (.docx)" }
+};
+const FORMAT_STORAGE_KEY = "medicao-formato-relatorio";
 const MAX_ACTIVITIES = 20;
 const MAX_PHOTO_BYTES = 30 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
+const UPLOAD_PART_BYTES = 2 * 1024 * 1024;
+const ATTACHMENT_FIELDS = ["fotoAntes", "fotoAntes2", "fotoDepois", "fotoDepois2"];
+const MIGRATION_FLAG = "medicao-registros-locais-enviados";
 const PHOTO_LABELS = {
   fotoAntes: "A foto antes 1",
   fotoAntes2: "A foto antes 2",
@@ -15,14 +25,7 @@ const PHOTO_LABELS = {
 const activityContainer = document.querySelector("#activities");
 const activityTemplate = document.querySelector("#activity-template");
 const reportForm = document.querySelector("#report-form");
-const generateWordButton = document.querySelector("#generate-word-button");
-const generatePptxButton = document.querySelector("#generate-pptx-button");
-const generateExcelButton = document.querySelector("#generate-excel-button"); // Adicione esta linha
-
 const generateButton = document.querySelector("#generate-button");
-const generateWordButton = document.querySelector("#generate-word-button"); // NOVO
-const generatePptxButton = document.querySelector("#generate-pptx-button"); // NOVO
-
 const saveRecordButton = document.querySelector("#save-record-button");
 const resetRecordButton = document.querySelector("#reset-record-button");
 const formStatus = document.querySelector("#form-status");
@@ -56,6 +59,7 @@ const sidebarOverlay = document.querySelector("#sidebar-overlay");
 const activityCards = [];
 
 const state = {
+  exportFormat: loadExportFormat(),
   view: "report",
   records: [],
   editingRecordId: null,
@@ -80,6 +84,7 @@ async function startApp() {
   bindRecordActions();
   bindBackupActions();
   bindReportForm();
+  bindFormatSelectors();
   initialize();
 }
 
@@ -146,12 +151,23 @@ async function initialize() {
     day: "2-digit",
     month: "long"
   }).format(new Date());
-  [state.records, state.config] = await Promise.all([
-    getAllRecords(),
-    getServiceConfig()
-  ]);
+  state.config = await getServiceConfig();
+  try {
+    await sendLocalRecordsToServer();
+    state.records = await getAllRecords();
+  } catch (error) {
+    state.records = [];
+    setTimeout(() => {
+      setFormMessage(
+        `Não foi possível carregar os registros do banco de dados: ${error.message}`,
+        "error"
+      );
+    }, 0);
+  }
 
+  // Make recipient editable by creating an input field next to #report-recipient
   ensureRecipientInput();
+
   resetForm();
   updateGenerateButton();
   renderDashboard();
@@ -162,7 +178,9 @@ async function initialize() {
 }
 
 function ensureRecipientInput() {
+  // Update displayed recipient from loaded config
   if (reportRecipient) reportRecipient.textContent = state.config.recipient || "";
+
   const existingInput = document.querySelector("#report-recipient-input");
   if (existingInput) {
     existingInput.value = state.config.recipient || "";
@@ -172,7 +190,9 @@ function ensureRecipientInput() {
     });
     return existingInput;
   }
+
   if (!reportRecipient || !reportRecipient.parentNode) return null;
+
   const input = document.createElement("input");
   input.type = "email";
   input.id = "report-recipient-input";
@@ -183,6 +203,8 @@ function ensureRecipientInput() {
     state.config.recipient = input.value.trim();
     if (reportRecipient) reportRecipient.textContent = state.config.recipient;
   });
+
+  // Insert the input after the existing element and hide the original label/span
   reportRecipient.parentNode.insertBefore(input, reportRecipient.nextSibling);
   reportRecipient.hidden = true;
   return input;
@@ -196,9 +218,13 @@ function bindAddOccurrence() {
 
 function addOccurrenceCard(data, options = {}) {
   if (activityCards.length >= MAX_ACTIVITIES) {
-    setFormMessage(`Limite de ${MAX_ACTIVITIES} ocorrências por medição atingido.`, "warning");
+    setFormMessage(
+      `Limite de ${MAX_ACTIVITIES} ocorrências por medição atingido.`,
+      "warning"
+    );
     return null;
   }
+
   const entry = createActivityCard(data);
   if (options.focus !== false) {
     entry.card.classList.add("is-open");
@@ -270,11 +296,16 @@ function createActivityCard(data) {
   );
   const PHOTO_FIELDS = ["fotoAntes", "fotoAntes2", "fotoDepois", "fotoDepois2"];
   const photos = Object.fromEntries(PHOTO_FIELDS.map((name) => [name, ""]));
+  const photoMeta = Object.fromEntries(PHOTO_FIELDS.map((name) => [name, { nome: "", tipo: "" }]));
   const photoErrors = {};
   const photoPromises = Object.fromEntries(
     PHOTO_FIELDS.map((name) => [name, Promise.resolve()])
   );
+  // Cada nova escolha de arquivo numa caixa invalida o processamento anterior.
+  const photoTokens = Object.fromEntries(PHOTO_FIELDS.map((name) => [name, 0]));
   let savedRecordId = "";
+  // Ocorrência aberta a partir de uma medição com várias ocorrências:
+  // ao salvar, atualiza a ocorrência dentro dessa medição.
   let parentLink = null;
 
   const setNumber = (position) => {
@@ -289,20 +320,26 @@ function createActivityCard(data) {
       fields.motivo.value.trim() ||
       PHOTO_FIELDS.some((name) => photos[name])
     );
-    const statusText = fields.status.value === "em-espera" ? "Em espera" : "Concluída";
+    const statusText =
+      fields.status.value === "em-espera" ? "Em espera" : "Concluída";
+
     const occurrenceOrder = fields.ordemServico.value.trim();
-    
-    summary.textContent = occurrenceOrder || fields.atividade.value.trim() || "Nova ocorrência";
+    summary.textContent =
+      occurrenceOrder || fields.atividade.value.trim() || "Nova ocorrência";
     meta.textContent = [
       fields.responsavel.value.trim() || "Sem responsável técnico informado",
       fields.atividade.value.trim()
-    ].filter(Boolean).join(" · ");
-    
+    ]
+      .filter(Boolean)
+      .join(" · ");
     statusBadge.textContent = hasContent ? statusText : "Pendente";
     statusBadge.className = `activity-status ${
-      hasContent ? (fields.status.value === "em-espera" ? "is-waiting" : "is-complete") : "is-empty"
+      hasContent
+        ? fields.status.value === "em-espera"
+          ? "is-waiting"
+          : "is-complete"
+        : "is-empty"
     }`;
-    
     updateProgress();
     renderFormWaitingReminders();
   };
@@ -314,7 +351,10 @@ function createActivityCard(data) {
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
     });
-    fields.motivo.placeholder = status === "em-espera" ? "Explique por que o problema ficou em espera" : "";
+    fields.motivo.placeholder =
+      status === "em-espera"
+        ? "Explique por que o problema ficou em espera"
+        : "";
     fields.motivo.required = status === "em-espera";
     waitingReasonField.hidden = status !== "em-espera";
     if (status !== "em-espera") {
@@ -337,13 +377,17 @@ function createActivityCard(data) {
   const syncMaintenanceType = (type = currentMaintenanceType()) => {
     const normalizedType = normalizeText(type);
     if (normalizedType.includes("corretiva")) {
-      fields.atividade.placeholder = "Ex.: Consertar caixa d'água, corrigir vazamento ou substituir componente danificado";
+      fields.atividade.placeholder =
+        "Ex.: Consertar caixa d'água, corrigir vazamento ou substituir componente danificado";
     } else if (normalizedType.includes("preventiva")) {
-      fields.atividade.placeholder = "Ex.: Inspecionar, limpar, ajustar ou prevenir falha no equipamento";
+      fields.atividade.placeholder =
+        "Ex.: Inspecionar, limpar, ajustar ou prevenir falha no equipamento";
     } else if (normalizedType.includes("emergencial")) {
-      fields.atividade.placeholder = "Ex.: Atender ocorrência emergencial e registrar a solução aplicada";
+      fields.atividade.placeholder =
+        "Ex.: Atender ocorrência emergencial e registrar a solução aplicada";
     } else {
-      fields.atividade.placeholder = "Descreva o problema, serviço realizado ou ponto inspecionado";
+      fields.atividade.placeholder =
+        "Descreva o problema, serviço realizado ou ponto inspecionado";
     }
   };
 
@@ -365,19 +409,55 @@ function createActivityCard(data) {
     }
   };
 
-  const setPhoto = (fieldName, dataUrl) => {
-    photos[fieldName] = dataUrl || "";
+  const setPhotoNotice = (fieldName, message = "") => {
+    const slot = fields[fieldName].closest(".photo-slot");
+    let note = slot.querySelector(".photo-notice");
+    if (message) {
+      if (!note) {
+        note = document.createElement("p");
+        note.className = "photo-notice";
+        note.setAttribute("role", "status");
+        slot.querySelector(".photo-input").after(note);
+      }
+      note.textContent = message;
+    } else {
+      note?.remove();
+    }
+  };
+
+  const setPhoto = (fieldName, value, meta = {}) => {
+    photos[fieldName] = value || "";
+    photoMeta[fieldName] = photos[fieldName]
+      ? { nome: meta.nome || "", tipo: meta.tipo || guessAttachmentType(photos[fieldName]) }
+      : { nome: "", tipo: "" };
     if (photos[fieldName]) setPhotoError(fieldName, "");
+    setPhotoNotice(fieldName, meta.notice || "");
     const input = fields[fieldName];
     const label = input.closest(".photo-input");
     const preview = label.querySelector("img");
+    let documentChip = label.querySelector(".document-chip");
     input.value = "";
-    if (photos[fieldName]) {
-      preview.src = photos[fieldName];
+    label.classList.remove("has-image", "has-document", "is-uploading");
+
+    if (!photos[fieldName]) {
+      preview.removeAttribute("src");
+      documentChip?.remove();
+      return;
+    }
+
+    if (isImageType(photoMeta[fieldName].tipo)) {
+      documentChip?.remove();
+      preview.src = meta.previewUrl || photos[fieldName];
       label.classList.add("has-image");
     } else {
       preview.removeAttribute("src");
-      label.classList.remove("has-image");
+      if (!documentChip) {
+        documentChip = document.createElement("span");
+        documentChip.className = "document-chip";
+        label.append(documentChip);
+      }
+      documentChip.innerHTML = `<strong>${escapeHtml(documentBadge(photoMeta[fieldName]))}</strong><span>${escapeHtml(photoMeta[fieldName].nome || "Documento anexado")}</span>`;
+      label.classList.add("has-document");
     }
   };
 
@@ -389,11 +469,19 @@ function createActivityCard(data) {
         : "Ocorrência ainda não salva individualmente.";
     }
     if (saveOccurrenceButton) {
-      saveOccurrenceButton.textContent = savedRecordId ? "Atualizar ocorrência" : "Salvar ocorrência";
+      saveOccurrenceButton.textContent = savedRecordId
+        ? "Atualizar ocorrência"
+        : "Salvar ocorrência";
     }
-    if (exportOccurrenceButton) {
-      exportOccurrenceButton.textContent = savedRecordId ? "Exportar PDF" : "Salvar e exportar PDF";
-    }
+    refreshExportLabel();
+  };
+
+  const refreshExportLabel = () => {
+    if (!exportOccurrenceButton || exportOccurrenceButton.disabled) return;
+    exportOccurrenceButton.textContent =
+      savedRecordId || parentLink
+        ? `Exportar ${reportFormatLabel()}`
+        : `Salvar e exportar ${reportFormatLabel()}`;
   };
 
   const reset = () => {
@@ -405,6 +493,9 @@ function createActivityCard(data) {
     applyDefaultDates();
     syncMaintenanceType();
     PHOTO_FIELDS.forEach((name) => {
+      photoTokens[name] += 1;
+      photoPromises[name] = Promise.resolve();
+      fields[name].closest(".photo-input").classList.remove("is-uploading");
       setPhoto(name, "");
       setPhotoError(name, "");
     });
@@ -423,7 +514,13 @@ function createActivityCard(data) {
     fields.legendaAntes2.value = activity.legendaAntes2 || "";
     fields.legendaDepois2.value = activity.legendaDepois2 || "";
     PHOTO_FIELDS.forEach((name) => {
-      setPhoto(name, activity[name] || "");
+      photoTokens[name] += 1;
+      photoPromises[name] = Promise.resolve();
+      fields[name].closest(".photo-input").classList.remove("is-uploading");
+      setPhoto(name, activity[name] || "", {
+        nome: activity[`${name}Nome`] || "",
+        tipo: activity[`${name}Tipo`] || ""
+      });
       setPhotoError(name, "");
     });
     syncMaintenanceType();
@@ -433,15 +530,22 @@ function createActivityCard(data) {
       ? { recordId: activity.parentRecordId, index: Number(activity.parentActivityIndex) || 0 }
       : null;
     if ((savedRecordId || parentLink) && occurrenceSaveStatus) {
-      occurrenceSaveStatus.textContent = "Ocorrência carregada para atualização individual.";
+      occurrenceSaveStatus.textContent =
+        "Ocorrência carregada para atualização individual.";
     }
     if (parentLink && saveOccurrenceButton) {
       saveOccurrenceButton.textContent = "Atualizar ocorrência";
     }
+    refreshExportLabel();
   };
 
   const getData = async () => {
-    await Promise.all(Object.values(photoPromises));
+    // Espera também arquivos escolhidos enquanto a espera já estava em curso.
+    let pending;
+    do {
+      pending = Object.values(photoPromises);
+      await Promise.all(pending);
+    } while (pending.some((promise, index) => promise !== Object.values(photoPromises)[index]));
     const hasMeaningfulData = Boolean(
       fields.atividade.value.trim() ||
       fields.ordemServico.value.trim() ||
@@ -456,11 +560,18 @@ function createActivityCard(data) {
       responsavel: fields.responsavel.value.trim(),
       atividade: fields.atividade.value.trim(),
       status: fields.status.value,
-      motivo: fields.status.value === "em-espera" ? fields.motivo.value.trim() : "",
+      motivo:
+        fields.status.value === "em-espera" ? fields.motivo.value.trim() : "",
       fotoAntes: photos.fotoAntes,
       fotoDepois: photos.fotoDepois,
       fotoAntes2: photos.fotoAntes2,
       fotoDepois2: photos.fotoDepois2,
+      ...Object.fromEntries(
+        PHOTO_FIELDS.flatMap((name) => [
+          [`${name}Nome`, photos[name] ? photoMeta[name].nome : ""],
+          [`${name}Tipo`, photos[name] ? photoMeta[name].tipo : ""]
+        ])
+      ),
       legendaAntes: fields.legendaAntes.value.trim(),
       legendaDepois: fields.legendaDepois.value.trim(),
       legendaAntes2: fields.legendaAntes2.value.trim(),
@@ -485,6 +596,7 @@ function createActivityCard(data) {
   }
 
   fields.dataAntes.addEventListener("change", renderFormWaitingReminders);
+
   fields.atividade.addEventListener("input", applyDefaultDates);
   fields.responsavel.addEventListener("input", applyDefaultDates);
 
@@ -496,24 +608,47 @@ function createActivityCard(data) {
     const photoField = fields[fieldName];
     photoField.addEventListener("change", () => {
       const file = photoField.files[0];
+      // Sem arquivo (seleção cancelada): mantém o anexo que já estava na caixa.
       if (!file) return;
       applyDefaultDates();
       setPhotoError(fieldName, "");
-      photoPromises[fieldName] = fileToDataUrl(file)
-        .then((dataUrl) => setPhoto(fieldName, dataUrl))
-        .catch((error) => {
-          setPhoto(fieldName, "");
-          setPhotoError(fieldName, `Foto não carregada: ${error.message}`);
-          setFormMessage(`${PHOTO_LABELS[fieldName]} não foi carregada: ${error.message}`, "error");
+      const label = photoField.closest(".photo-input");
+      const token = ++photoTokens[fieldName];
+      const current = () => token === photoTokens[fieldName];
+      label.classList.add("is-uploading");
+      photoPromises[fieldName] = prepareAttachment(file)
+        .then((attachment) => {
+          if (current()) setPhoto(fieldName, attachment.value, attachment);
         })
-        .finally(updateSummary);
+        .catch((error) => {
+          if (!current()) return;
+          setPhoto(fieldName, "");
+          setPhotoError(fieldName, `Arquivo não carregado: ${error.message}`);
+          setFormMessage(
+            `${PHOTO_LABELS[fieldName]} não foi carregada: ${error.message}`,
+            "error"
+          );
+        })
+        .finally(() => {
+          if (!current()) return;
+          label.classList.remove("is-uploading");
+          updateSummary();
+        });
     });
   }
 
   const entry = {
-    card, fields, getData, reset, setData, setNumber, syncMaintenanceType, updateSummary,
+    card,
+    fields,
+    getData,
+    reset,
+    setData,
+    setNumber,
+    syncMaintenanceType,
+    updateSummary,
     getSavedRecordId: () => savedRecordId,
     getParentLink: () => parentLink,
+    refreshExportLabel,
     getPhotoErrors: () => ({ ...photoErrors }),
     setSavedRecordId
   };
@@ -524,7 +659,9 @@ function createActivityCard(data) {
   });
   removeButton?.addEventListener("click", () => removeOccurrenceCard(entry));
   saveOccurrenceButton?.addEventListener("click", () => saveOccurrenceFromCard(entry));
-  exportOccurrenceButton?.addEventListener("click", () => exportOccurrenceFromCard(entry, exportOccurrenceButton));
+  exportOccurrenceButton?.addEventListener("click", () =>
+    exportOccurrenceFromCard(entry, exportOccurrenceButton)
+  );
 
   activityContainer.append(fragment);
   activityCards.push(entry);
@@ -636,12 +773,23 @@ function bindRecordActions() {
       return;
     }
 
-    // Configura a extensão correta com base no formato
-    let extensao = format;
-    if (format === 'docx') extensao = 'docx';
-    else if (format === 'pptx') extensao = 'pptx';
-    else if (format === 'xlsx') extensao = 'xlsx'; // Adicione o Excel aqui
-    else extensao = 'pdf';
+    if (action === "export") {
+      await exportSavedRecord(record, button);
+    }
+  });
+
+  const openRecordFromSummary = (event) => {
+    const button = event.target.closest("[data-open-record]");
+    if (!button) return;
+    setView("records");
+    const box = recordsList.querySelector(
+      `[data-record-box="${CSS.escape(button.dataset.openRecord)}"]`
+    );
+    if (box) {
+      box.open = true;
+      box.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
 
   dashboardContent.addEventListener("click", openRecordFromSummary);
   operationsContent.addEventListener("click", openRecordFromSummary);
@@ -666,7 +814,10 @@ function bindReportForm() {
     if (!activity) return;
     activity.card.classList.add("is-open");
     activity.card.scrollIntoView({ behavior: "smooth", block: "center" });
-    const focusTarget = activity.fields.status.value === "em-espera" ? activity.fields.motivo : activity.fields.atividade;
+    const focusTarget =
+      activity.fields.status.value === "em-espera"
+        ? activity.fields.motivo
+        : activity.fields.atividade;
     focusTarget.focus({ preventScroll: true });
   });
 }
@@ -682,7 +833,9 @@ function exportRecordsBackup() {
     null,
     2
   );
-  const url = URL.createObjectURL(new Blob([payload], { type: "application/json;charset=utf-8" }));
+  const url = URL.createObjectURL(
+    new Blob([payload], { type: "application/json;charset=utf-8" })
+  );
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `backup-medicoes-${new Date().toISOString().slice(0, 10)}.json`;
@@ -702,13 +855,19 @@ async function importRecordsBackup(event) {
     if (payload?.format !== "medicao-pro-backup" || !Array.isArray(payload.records)) {
       throw new Error("O arquivo selecionado não é um backup válido do Medição Pro.");
     }
+
     const validRecords = payload.records.filter(isValidBackupRecord);
     if (!validRecords.length) {
       throw new Error("O backup não contém medições válidas.");
     }
-    if (!confirm(`Importar ${validRecords.length} medição(ões)? Registros com o mesmo identificador serão atualizados.`)) {
+    if (
+      !confirm(
+        `Importar ${validRecords.length} medição(ões)? Registros com o mesmo identificador serão atualizados.`
+      )
+    ) {
       return;
     }
+
     await Promise.all(validRecords.map((record) => putRecord(record)));
     state.records = await getAllRecords();
     renderAllDataViews();
@@ -720,13 +879,22 @@ async function importRecordsBackup(event) {
 
 function isValidBackupRecord(record) {
   return Boolean(
-    record && typeof record.id === "string" && record.metadata && typeof record.metadata === "object" && Array.isArray(record.activities)
+    record &&
+      typeof record.id === "string" &&
+      record.metadata &&
+      typeof record.metadata === "object" &&
+      Array.isArray(record.activities)
   );
 }
 
 function setView(view) {
   state.view = view;
-  const viewTitles = { dashboard: "Dashboard", report: state.editingRecordId ? "Editar medição" : "Nova medição", records: "Registros", operations: "Visão operacional" };
+  const viewTitles = {
+    dashboard: "Dashboard",
+    report: state.editingRecordId ? "Editar medição" : "Nova medição",
+    records: "Registros",
+    operations: "Visão operacional"
+  };
   currentViewTitle.textContent = viewTitles[view] || "Medição Pro";
   document.querySelectorAll("[data-view-panel]").forEach((panel) => {
     panel.classList.toggle("is-active", panel.dataset.viewPanel === view);
@@ -750,6 +918,8 @@ function setSidebarOpen(open) {
 
 function resetForm() {
   reportForm.reset();
+  // reset() também volta o seletor de formato ao padrão; mantém a escolha do usuário.
+  syncFormatControls();
   reportForm.elements.competencia.value = currentCompetenceLabel();
   reportForm.elements.contratada.value = DEFAULT_CONTRACTOR;
   reportForm.elements.tipoManutencao.value = "Preventiva";
@@ -760,9 +930,10 @@ function resetForm() {
   syncMaintenanceCards();
   renderFormWaitingReminders();
   reportPageTitle.textContent = "Nova medição de serviço";
-  reportPageDescription.textContent = "Preencha os dados, registre o problema, adicione as fotos de antes e depois e gere o relatório.";
+  reportPageDescription.textContent =
+    "Preencha os dados, registre o problema, adicione as fotos de antes e depois e gere o relatório.";
   saveRecordButton.textContent = "Salvar medição";
-  setFormMessage("Salve a medição ou gere o relatório no formato desejado.");
+  setFormMessage("Salve a medição ou gere o relatório.");
 }
 
 function loadRecordIntoForm(record, options = {}) {
@@ -770,8 +941,10 @@ function loadRecordIntoForm(record, options = {}) {
   state.editingRecordId = record.id;
   reportForm.elements.competencia.value = record.metadata.competencia || "";
   reportForm.elements.ordemServico.value = record.metadata.ordemServico || "";
-  reportForm.elements.contratada.value = record.metadata.contratada || DEFAULT_CONTRACTOR;
-  reportForm.elements.tipoManutencao.value = record.metadata.tipoManutencao || "";
+  reportForm.elements.contratada.value =
+    record.metadata.contratada || DEFAULT_CONTRACTOR;
+  reportForm.elements.tipoManutencao.value =
+    record.metadata.tipoManutencao || "";
   clearOccurrenceCards();
   const activities = filledActivities(record);
   const list = activities.length ? activities : [{}];
@@ -779,7 +952,8 @@ function loadRecordIntoForm(record, options = {}) {
     addOccurrenceCard(
       {
         ...activityData,
-        ordemServico: activityData.ordemServico || record.metadata.ordemServico || "",
+        ordemServico:
+          activityData.ordemServico || record.metadata.ordemServico || "",
         recordId: list.length === 1 ? record.id : "",
         parentRecordId: list.length > 1 ? record.id : "",
         parentActivityIndex: index
@@ -788,27 +962,42 @@ function loadRecordIntoForm(record, options = {}) {
     );
   });
   syncMaintenanceCards();
-  const openIndex = Number.isInteger(options.openActivityIndex) ? Math.min(Math.max(options.openActivityIndex, 0), activityCards.length - 1) : 0;
-  activityCards.forEach((entry, index) => entry.card.classList.toggle("is-open", index === openIndex));
+  const openIndex = Number.isInteger(options.openActivityIndex)
+    ? Math.min(Math.max(options.openActivityIndex, 0), activityCards.length - 1)
+    : 0;
+  activityCards.forEach((entry, index) =>
+    entry.card.classList.toggle("is-open", index === openIndex)
+  );
   if (options.openActivityIndex !== undefined) {
     requestAnimationFrame(() => {
-      activityCards[openIndex]?.card.scrollIntoView({ behavior: "smooth", block: "center" });
+      activityCards[openIndex]?.card.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
     });
   }
   reportPageTitle.textContent = `Editar ${recordLabel(record)}`;
-  reportPageDescription.textContent = "Atualize os dados e salve para manter o histórico sincronizado.";
+  reportPageDescription.textContent =
+    "Atualize os dados e salve para manter o histórico sincronizado.";
   saveRecordButton.textContent = "Atualizar medição";
   setFormMessage(`Editando registro salvo em ${formatDateTime(record.updatedAt)}.`);
 }
 
+
 async function saveOccurrenceFromCard(activityCard) {
   if (!activityCard) return null;
-  const requiredFields = [reportForm.elements.competencia, reportForm.elements.contratada, reportForm.elements.tipoManutencao];
+
+  const requiredFields = [
+    reportForm.elements.competencia,
+    reportForm.elements.contratada,
+    reportForm.elements.tipoManutencao
+  ];
   const invalidField = requiredFields.find((field) => !field.checkValidity());
   if (invalidField) {
     invalidField.reportValidity();
     return null;
   }
+
   const activity = await activityCard.getData();
   if (!String(activity.atividade || "").trim()) {
     activityCard.card.classList.add("is-open");
@@ -816,33 +1005,48 @@ async function saveOccurrenceFromCard(activityCard) {
     setFormMessage("Descreva a ocorrência antes de salvar individualmente.", "error");
     return null;
   }
+
   if (activity.status === "em-espera" && !String(activity.motivo || "").trim()) {
     activityCard.card.classList.add("is-open");
     activityCard.fields.motivo.focus();
     setFormMessage("Informe o motivo da espera antes de salvar a ocorrência.", "error");
     return null;
   }
+
   const formData = new FormData(reportForm);
-  const order = String(activity.ordemServico || "").trim() || String(formData.get("ordemServico") || "").trim();
+  const order =
+    String(activity.ordemServico || "").trim() ||
+    String(formData.get("ordemServico") || "").trim();
+
   if (!order) {
     activityCard.card.classList.add("is-open");
     activityCard.fields.ordemServico.focus();
     setFormMessage("Informe o número da OS desta ocorrência.", "error");
     return null;
   }
+
   activity.ordemServico = order;
+
   const now = new Date().toISOString();
   const parentLink = activityCard.getParentLink?.();
-  const parent = parentLink ? state.records.find((item) => item.id === parentLink.recordId) : null;
+  const parent = parentLink
+    ? state.records.find((item) => item.id === parentLink.recordId)
+    : null;
   const parentTarget = parent ? filledActivities(parent)[parentLink.index] : null;
   const parentPosition = parentTarget ? parent.activities.indexOf(parentTarget) : -1;
+
   let record;
   if (parent && parentPosition >= 0) {
+    // Atualiza só esta ocorrência dentro da medição de origem.
     parent.activities[parentPosition] = activity;
     parent.updatedAt = now;
     record = parent;
   } else {
-    const existing = state.records.find((item) => item.id === activityCard.getSavedRecordId());
+    // Só atualiza o registro criado por este mesmo cartão; uma ocorrência nova
+    // sempre gera um registro novo, mesmo que a OS se repita.
+    const existing = state.records.find(
+      (item) => item.id === activityCard.getSavedRecordId()
+    );
     record = {
       id: existing?.id || crypto.randomUUID(),
       metadata: {
@@ -858,13 +1062,16 @@ async function saveOccurrenceFromCard(activityCard) {
       lastExportFormat: existing?.lastExportFormat || ""
     };
   }
+
   await putRecord(record);
   upsertStateRecord(record);
   if (record !== parent) activityCard.setSavedRecordId(record.id);
   renderAllDataViews();
   const photoWarning = photoErrorSummary([activityCard]);
   setFormMessage(
-    photoWarning ? `Ocorrência ${recordLabel(record)} salva, mas ${photoWarning}` : `Ocorrência ${recordLabel(record)} salva individualmente.`,
+    photoWarning
+      ? `Ocorrência ${recordLabel(record)} salva, mas ${photoWarning}`
+      : `Ocorrência ${recordLabel(record)} salva individualmente.`,
     photoWarning ? "warning" : "success"
   );
   return { record, activity };
@@ -878,7 +1085,10 @@ function photoErrorSummary(entries = activityCards) {
     })
   );
   if (!problems.length) return "";
-  const list = problems.length === 1 ? problems[0] : `${problems.slice(0, -1).join(", ")} e ${problems.at(-1)}`;
+  const list =
+    problems.length === 1
+      ? problems[0]
+      : `${problems.slice(0, -1).join(", ")} e ${problems.at(-1)}`;
   return `${list} não ${problems.length === 1 ? "foi carregada" : "foram carregadas"}. Veja o aviso na caixa da foto e selecione a imagem novamente.`;
 }
 
@@ -887,6 +1097,7 @@ async function exportOccurrenceFromCard(activityCard, button) {
   button.disabled = true;
   const originalText = button.textContent;
   button.textContent = "Preparando...";
+
   try {
     const saved = await saveOccurrenceFromCard(activityCard);
     if (!saved) return;
@@ -895,14 +1106,20 @@ async function exportOccurrenceFromCard(activityCard, button) {
     await exportSavedRecord(
       { ...record, activities: [activity] },
       button,
-      REPORT_FORMAT,
-      { successMessage: "PDF individual da ocorrência baixado com sucesso.", touchRecord: record }
+      currentFormat(),
+      {
+        successMessage: `${reportFormatLabel()} da ocorrência baixado com sucesso.`,
+        touchRecord: record
+      }
     );
     const photoWarning = photoErrorSummary([activityCard]);
-    if (photoWarning) setFormMessage(`PDF baixado, mas ${photoWarning}`, "warning");
+    if (photoWarning) {
+      setFormMessage(`${reportFormatLabel()} baixado, mas ${photoWarning}`, "warning");
+    }
   } finally {
     button.disabled = false;
-    button.textContent = activityCard.getSavedRecordId() ? "Exportar PDF" : originalText || "Exportar PDF";
+    button.textContent = originalText;
+    activityCard.refreshExportLabel();
   }
 }
 
@@ -910,9 +1127,22 @@ async function deleteActivityFromRecord(record, activityIndex) {
   const activities = filledActivities(record);
   const target = activities[activityIndex];
   if (!target) return;
-  if (!confirm(`Excluir a ocorrência ${String(activityIndex + 1).padStart(2, "0")} de ${recordLabel(record)}?`)) return;
+
+  if (
+    !confirm(
+      `Excluir a ocorrência ${String(activityIndex + 1).padStart(2, "0")} de ${recordLabel(
+        record
+      )}?`
+    )
+  ) {
+    return;
+  }
+
   const remaining = (record.activities || []).filter((item) => item !== target);
-  const stillFilled = remaining.filter((item) => String(item?.atividade || "").trim());
+  const stillFilled = remaining.filter((item) =>
+    String(item?.atividade || "").trim()
+  );
+
   if (!stillFilled.length) {
     await deleteRecord(record.id);
     state.records = state.records.filter((item) => item.id !== record.id);
@@ -920,6 +1150,7 @@ async function deleteActivityFromRecord(record, activityIndex) {
     renderAllDataViews();
     return;
   }
+
   record.activities = remaining;
   record.updatedAt = new Date().toISOString();
   await putRecord(record);
@@ -937,7 +1168,8 @@ async function saveCurrentRecord(options = {}) {
   upsertStateRecord(record);
   state.editingRecordId = record.id;
   reportPageTitle.textContent = `Editar ${recordLabel(record)}`;
-  reportPageDescription.textContent = "Atualize os dados e salve para manter o histórico sincronizado.";
+  reportPageDescription.textContent =
+    "Atualize os dados e salve para manter o histórico sincronizado.";
   saveRecordButton.textContent = "Atualizar medição";
   renderAllDataViews();
   if (!options.silent) {
@@ -952,27 +1184,37 @@ async function saveCurrentRecord(options = {}) {
 
 async function collectCurrentRecord() {
   if (!reportForm.reportValidity()) return null;
+
   try {
     validateActivities();
   } catch (error) {
     setFormMessage(error.message, "error");
     return null;
   }
-  
+
   saveRecordButton.disabled = true;
-  if (generateButton) generateButton.disabled = true;
-  if (generateWordButton) generateWordButton.disabled = true;
-  if (generatePptxButton) generatePptxButton.disabled = true;
-  
+  generateButton.disabled = true;
   setFormMessage("Preparando fotos e salvando a medição...");
+
   try {
     const formData = new FormData(reportForm);
-    const collected = await Promise.all(activityCards.map((activity) => activity.getData()));
+    const collected = await Promise.all(
+      activityCards.map((activity) => activity.getData())
+    );
     const activities = collected.filter(
-      (activity) => activity.atividade || activity.fotoAntes || activity.fotoDepois || activity.fotoAntes2 || activity.fotoDepois2 || activity.ordemServico || activity.responsavel
+      (activity) =>
+        activity.atividade ||
+        activity.fotoAntes ||
+        activity.fotoDepois ||
+        activity.fotoAntes2 ||
+        activity.fotoDepois2 ||
+        activity.ordemServico ||
+        activity.responsavel
     );
     const firstActivityOrder = activities.find((activity) => activity.ordemServico)?.ordemServico || "";
-    const existing = state.records.find((record) => record.id === state.editingRecordId);
+    const existing = state.records.find(
+      (record) => record.id === state.editingRecordId
+    );
     const now = new Date().toISOString();
     return {
       id: existing?.id || crypto.randomUUID(),
@@ -989,75 +1231,37 @@ async function collectCurrentRecord() {
     };
   } finally {
     saveRecordButton.disabled = false;
-    if (generateButton) generateButton.disabled = false;
-    if (generateWordButton) generateWordButton.disabled = false;
-    if (generatePptxButton) generatePptxButton.disabled = false;
+    generateButton.disabled = false;
   }
 }
 
-// -------------------------------------------------------------
-// EVENTO PRINCIPAL DE EXPORTAÇÃO (CORRIGIDO PARA SUPORTAR WORD E PPTX)
-// -------------------------------------------------------------
 reportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  
-  const submitter = event.submitter;
-  let format = "pdf";
-  let targetButton = generateButton;
-
-  if (submitter?.id === "generate-pptx-button") {
-    format = "pptx";
-    targetButton = generatePptxButton;
-  } else if (submitter?.id === "generate-word-button") {
-    format = "docx";
-    targetButton = generateWordButton;
-  }
-
   const record = await saveCurrentRecord({ silent: true });
   if (!record) return;
-  
-  await exportSavedRecord(record, targetButton, format);
-  
-  const photoWarning = photoErrorSummary();
-  if (photoWarning) setFormMessage(`Relatório gerado, mas ${photoWarning}`, "warning");
-  reportForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  
-  const submitter = event.submitter;
-  let format = "pdf";
-  let targetButton = generateButton;
-
-  if (submitter?.id === "generate-pptx-button") {
-    format = "pptx";
-    targetButton = generatePptxButton;
-  } else if (submitter?.id === "generate-word-button") {
-    format = "docx";
-    targetButton = generateWordButton;
-  } else if (submitter?.id === "generate-excel-button") { // ADICIONE ESTAS 3 LINHAS
-    format = "xlsx";
-    targetButton = generateExcelButton;
-  }
-
-  const record = await saveCurrentRecord({ silent: true });
-  if (!record) return;
-  
-  await exportSavedRecord(record, targetButton, format);
-  
+  await exportSavedRecord(record, generateButton, currentFormat());
   const photoWarning = photoErrorSummary();
   if (photoWarning) setFormMessage(`Relatório gerado, mas ${photoWarning}`, "warning");
 });
-});
-// -------------------------------------------------------------
 
-async function exportSavedActivity(parentRecord, activity, button, format = REPORT_FORMAT) {
+async function exportSavedActivity(parentRecord, activity, button, format = currentFormat()) {
   const order = String(activity.ordemServico || parentRecord.metadata?.ordemServico || "").trim();
   await exportSavedRecord(
-    { ...parentRecord, metadata: { ...parentRecord.metadata, ordemServico: order }, activities: [{ ...activity, ordemServico: order }] },
-    button, format, { successMessage: "PDF individual da ocorrência baixado com sucesso.", touchRecord: parentRecord }
+    {
+      ...parentRecord,
+      metadata: { ...parentRecord.metadata, ordemServico: order },
+      activities: [{ ...activity, ordemServico: order }]
+    },
+    button,
+    format,
+    {
+      successMessage: `${reportFormatLabel(format)} da ocorrência baixado com sucesso.`,
+      touchRecord: parentRecord
+    }
   );
 }
 
-async function exportSavedRecord(record, button, format = REPORT_FORMAT, options = {}) {
+async function exportSavedRecord(record, button, format = currentFormat(), options = {}) {
   const formatLabel = reportFormatLabel(format);
   button.disabled = true;
   setFormMessage(`Gerando ${formatLabel} e preparando a exportação...`);
@@ -1065,48 +1269,47 @@ async function exportSavedRecord(record, button, format = REPORT_FORMAT, options
   try {
     const payload = JSON.stringify({
       metadata: record.metadata,
-      activities: record.activities,
+      activities: reportActivities(record.activities),
       format,
       recipient: state.config.recipient
     });
     if (new Blob([payload]).size > 45 * 1024 * 1024) {
-      throw new Error("As fotos ultrapassaram o limite do envio. Remova algumas imagens e tente novamente.");
+      throw new Error(
+        "As fotos ultrapassaram o limite do envio. Remova algumas imagens e tente novamente."
+      );
     }
+
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload
     });
+
     if (response.status === 401) {
       redirectToLogin();
       throw new Error("Sessão expirada. Entre novamente.");
     }
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.error || "Falha ao gerar o relatório.");
     }
+
     const emailStatus = response.headers.get("X-Report-Email");
-    const recipient = response.headers.get("X-Report-Recipient") || state.config.recipient;
+    const recipient =
+      response.headers.get("X-Report-Recipient") || state.config.recipient;
     const blob = await response.blob();
     const downloadUrl = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = downloadUrl;
-    
-    // Configura a extensão correta com base no formato
-    let extensao = format;
-    if(format === 'docx') extensao = 'docx';
-    else if(format === 'pptx') extensao = 'pptx';
-    else extensao = 'pdf';
-    
-    // Modifica o filename padrão
-    const fallbackFilename = `Relatorio Fotografico - ${record.metadata.competencia}.${extensao}`;
-    anchor.download = filenameFromResponse(response) || fallbackFilename;
-    
+    anchor.download = filenameFromResponse(response);
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(downloadUrl);
 
+    // Marca a exportação no registro salvo (a cópia usada no PDF de uma
+    // ocorrência isolada nunca é gravada no lugar dele).
     const exportedRecord = options.touchRecord || record;
     exportedRecord.lastExportedAt = new Date().toISOString();
     exportedRecord.lastExportFormat = format;
@@ -1116,19 +1319,41 @@ async function exportSavedRecord(record, button, format = REPORT_FORMAT, options
     renderAllDataViews();
 
     if (emailStatus === "sent") {
-      setFormMessage(`Relatório baixado e enviado para ${recipient}.`, "success");
+      setFormMessage(
+        `Relatório baixado e enviado para ${recipient}.`,
+        "success"
+      );
     } else if (emailStatus === "failed") {
-      setFormMessage(`${formatLabel} baixado, mas o envio por e-mail falhou. Tente novamente.`, "warning");
+      setFormMessage(
+        `${formatLabel} baixado, mas o envio por e-mail falhou. Tente novamente.`,
+        "warning"
+      );
     } else if (emailStatus === "not-configured") {
-      setFormMessage(`${formatLabel} baixado, mas o envio por e-mail não está configurado.`, "warning");
+      setFormMessage(options.successMessage || `${formatLabel} baixado com sucesso.`, "success");
     } else {
-      setFormMessage(options.successMessage || `${formatLabel} baixado com sucesso!`, options.successMessage ? "success" : "success");
+      setFormMessage(
+        options.successMessage || `${formatLabel} baixado. Não foi possível confirmar o status do envio por e-mail.`,
+        options.successMessage ? "success" : "warning"
+      );
     }
   } catch (error) {
     setFormMessage(error.message, "error");
   } finally {
     button.disabled = false;
   }
+}
+
+// No envio para o relatório, documentos que não são imagem vão só com nome e
+// tipo (o PDF mostra o nome); imagens vão como estão salvas.
+function reportActivities(activities = []) {
+  return activities.map((activity = {}) => {
+    const copy = { ...activity };
+    for (const field of ATTACHMENT_FIELDS) {
+      const tipo = copy[`${field}Tipo`] || guessAttachmentType(copy[field]);
+      if (copy[field] && !isImageType(tipo)) copy[field] = "";
+    }
+    return copy;
+  });
 }
 
 function renderAllDataViews() {
@@ -1156,11 +1381,13 @@ function renderFormWaitingReminders() {
       status: activity.fields.status.value
     }))
     .filter((activity) => activity.status === "em-espera");
+
   waitingReminders.hidden = !waiting.length;
   if (!waiting.length) {
     waitingReminderList.innerHTML = "";
     return;
   }
+
   waitingReminderList.innerHTML = waiting
     .map(
       (activity) => `
@@ -1171,10 +1398,13 @@ function renderFormWaitingReminders() {
             <small>${escapeHtml(activity.responsavel || "Sem responsável técnico")} · Entrada ${formatDate(activity.dataAntes || currentDateInputValue())}</small>
           </div>
           <p>${escapeHtml(activity.motivo || "Informe o motivo da espera para salvar o registro.")}</p>
-          <button type="button" class="secondary-action" data-open-activity="${activity.index}">Abrir item</button>
+          <button type="button" class="secondary-action" data-open-activity="${activity.index}">
+            Abrir item
+          </button>
         </article>
       `
-    ).join("");
+    )
+    .join("");
 }
 
 function renderRecords() {
@@ -1182,37 +1412,75 @@ function renderRecords() {
   const type = recordTypeFilter.value;
   const status = recordStatusFilter.value;
   const sort = recordSortFilter.value;
-  const filtered = state.records.filter((record) => {
-    const activities = filledActivities(record);
-    const haystack = normalizeText(
-      [record.metadata.competencia, record.metadata.ordemServico, record.metadata.contratada, record.metadata.tipoManutencao,
-       ...activities.flatMap((activity) => [activity.ordemServico, activity.responsavel, activity.atividade, activity.motivo])].join(" ")
-    );
-    if (search && !haystack.includes(search)) return false;
-    if (type !== "all" && record.metadata.tipoManutencao !== type) return false;
-    if (status === "complete" && activities.some(isWaiting)) return false;
-    if (status === "waiting" && !activities.some(isWaiting)) return false;
-    return true;
-  });
+  const filtered = state.records
+    .filter((record) => {
+      const activities = filledActivities(record);
+      const haystack = normalizeText(
+        [
+          record.metadata.competencia,
+          record.metadata.ordemServico,
+          record.metadata.contratada,
+          record.metadata.tipoManutencao,
+          ...activities.flatMap((activity) => [
+            activity.ordemServico,
+            activity.responsavel,
+            activity.atividade,
+            activity.motivo
+          ])
+        ].join(" ")
+      );
+      if (search && !haystack.includes(search)) return false;
+      if (type !== "all" && record.metadata.tipoManutencao !== type) return false;
+      if (status === "complete" && activities.some(isWaiting)) return false;
+      if (status === "waiting" && !activities.some(isWaiting)) return false;
+      return true;
+    });
+
   filtered.sort((a, b) => {
-    if (sort === "oldest") return String(a.updatedAt).localeCompare(String(b.updatedAt));
-    if (sort === "order") return recordLabel(a).localeCompare(recordLabel(b), "pt-BR", { numeric: true });
+    if (sort === "oldest") {
+      return String(a.updatedAt).localeCompare(String(b.updatedAt));
+    }
+    if (sort === "order") {
+      return recordLabel(a).localeCompare(recordLabel(b), "pt-BR", {
+        numeric: true
+      });
+    }
     return String(b.updatedAt).localeCompare(String(a.updatedAt));
   });
-  recordsResultCount.textContent = `${filtered.length} ${filtered.length === 1 ? "registro" : "registros"}`;
+
+  recordsResultCount.textContent = `${filtered.length} ${
+    filtered.length === 1 ? "registro" : "registros"
+  }`;
+
   if (!filtered.length) {
     recordsList.innerHTML = `
       <div class="empty-state">
         <strong>Nenhuma medição encontrada</strong>
         <p>Salve uma nova medição ou ajuste os filtros.</p>
-        <button type="button" class="primary-action" data-go-to-empty="report">Criar medição</button>
+        <button type="button" class="primary-action" data-go-to-empty="report">
+          Criar medição
+        </button>
       </div>
     `;
     refreshIcons();
-    recordsList.querySelector("[data-go-to-empty]")?.addEventListener("click", () => { resetForm(); setView("report"); });
+    recordsList
+      .querySelector("[data-go-to-empty]")
+      ?.addEventListener("click", () => {
+        resetForm();
+        setView("report");
+      });
     return;
   }
+
+  // Mantém abertas as caixas que o usuário tinha aberto (ex.: depois de baixar).
+  const openIds = new Set(
+    [...recordsList.querySelectorAll("details.record-box[open]")].map((box) => box.dataset.recordBox)
+  );
   recordsList.innerHTML = filtered.map(recordBox).join("");
+  openIds.forEach((id) => {
+    const box = recordsList.querySelector(`[data-record-box="${CSS.escape(id)}"]`);
+    if (box) box.open = true;
+  });
   refreshIcons();
 }
 
@@ -1222,6 +1490,7 @@ function recordBox(record) {
   const completed = activities.length - waiting;
   const statusClass = waiting ? "is-waiting" : "is-complete";
   const statusText = waiting ? `${waiting} em espera` : "Concluída";
+
   return `
     <details class="record-box" data-record-box="${escapeAttr(record.id)}">
       <summary>
@@ -1244,14 +1513,16 @@ function recordBox(record) {
           ${metadataItem("Tipo de manutenção", record.metadata.tipoManutencao || "Não informado")}
           ${metadataItem("Atualizado em", formatDateTime(record.updatedAt))}
         </div>
+
         <div class="record-activity-list">
           ${activities.map((activity, index) => recordActivity(activity, index, record)).join("")}
         </div>
+
         <div class="record-actions">
           <span>${completed} concluída(s) · ${waiting} em espera</span>
           <div>
             <button type="button" class="secondary-action" data-record-action="edit" data-record-id="${escapeAttr(record.id)}">Editar medição</button>
-            <button type="button" class="secondary-action" data-record-action="export" data-record-id="${escapeAttr(record.id)}">Baixar PDF</button>
+            <button type="button" class="secondary-action" data-record-action="export" data-record-id="${escapeAttr(record.id)}">Baixar ${escapeHtml(reportFormatLabel())}</button>
             <button type="button" class="danger-action" data-record-action="delete" data-record-id="${escapeAttr(record.id)}">Apagar medição</button>
           </div>
         </div>
@@ -1277,7 +1548,7 @@ function recordActivity(activity, index, record = null) {
       ${record ? `
         <div class="saved-activity__actions">
           <button type="button" class="secondary-action" data-record-action="edit-activity" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Editar ocorrência</button>
-          <button type="button" class="secondary-action" data-record-action="export-activity" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Baixar PDF</button>
+          <button type="button" class="secondary-action" data-record-action="export-activity" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Baixar ${escapeHtml(reportFormatLabel())}</button>
           <button type="button" class="danger-action" data-record-action="delete-activity" data-record-id="${escapeAttr(record.id)}" data-activity-index="${index}">Excluir ocorrência</button>
         </div>
       ` : ""}
@@ -1285,30 +1556,70 @@ function recordActivity(activity, index, record = null) {
   `;
 }
 
+function attachmentEntry(activity, field, label, caption) {
+  return {
+    label,
+    src: activity[field],
+    caption,
+    nome: activity[`${field}Nome`] || "",
+    tipo: activity[`${field}Tipo`] || guessAttachmentType(activity[field])
+  };
+}
+
 function savedPhotoGallery(activity) {
   const rows = [
-    { title: "Antes", tone: "is-entry", photos: [{ label: "Antes 1", src: activity.fotoAntes, caption: activity.legendaAntes }, { label: "Antes 2", src: activity.fotoAntes2, caption: activity.legendaAntes2 }] },
-    { title: "Depois", tone: "is-exit", photos: [{ label: "Depois 1", src: activity.fotoDepois, caption: activity.legendaDepois }, { label: "Depois 2", src: activity.fotoDepois2, caption: activity.legendaDepois2 }] }
-  ].map((row) => ({ ...row, photos: row.photos.filter((photo) => photo.src) })).filter((row) => row.photos.length);
+    {
+      title: "Antes",
+      tone: "is-entry",
+      photos: [
+        attachmentEntry(activity, "fotoAntes", "Antes 1", activity.legendaAntes),
+        attachmentEntry(activity, "fotoAntes2", "Antes 2", activity.legendaAntes2)
+      ]
+    },
+    {
+      title: "Depois",
+      tone: "is-exit",
+      photos: [
+        attachmentEntry(activity, "fotoDepois", "Depois 1", activity.legendaDepois),
+        attachmentEntry(activity, "fotoDepois2", "Depois 2", activity.legendaDepois2)
+      ]
+    }
+  ]
+    .map((row) => ({ ...row, photos: row.photos.filter((photo) => photo.src) }))
+    .filter((row) => row.photos.length);
+
   if (!rows.length) return "";
+
   return `
     <div class="saved-photo-rows">
-      ${rows.map((row) => `
+      ${rows
+        .map(
+          (row) => `
             <div class="saved-photo-row ${row.tone}">
               <span class="saved-photo-row__title">${escapeHtml(row.title)}</span>
               <div class="saved-photos">
-                ${row.photos.map((photo) => `
+                ${row.photos
+                  .map(
+                    (photo) => `
                       <figure>
-                        <img src="${escapeAttr(photo.src)}" alt="${escapeAttr(photo.label)}">
+                        ${
+                          isImageType(photo.tipo)
+                            ? `<img src="${escapeAttr(photo.src)}" alt="${escapeAttr(photo.label)}" loading="lazy">`
+                            : `<a class="saved-document" href="${escapeAttr(photo.src)}" target="_blank" rel="noopener" download="${escapeAttr(photo.nome || "documento")}"><strong>${escapeHtml(documentBadge(photo))}</strong><span>${escapeHtml(photo.nome || "Documento anexado")}</span></a>`
+                        }
                         <figcaption>
                           <strong>${escapeHtml(photo.label)}</strong>
                           ${photo.caption ? `<span>${escapeHtml(photo.caption)}</span>` : ""}
                         </figcaption>
                       </figure>
-                    `).join("")}
+                    `
+                  )
+                  .join("")}
               </div>
             </div>
-          `).join("")}
+          `
+        )
+        .join("")}
     </div>
   `;
 }
@@ -1318,14 +1629,29 @@ function renderDashboard() {
   const activities = records.flatMap(filledActivities);
   const waiting = activities.filter(isWaiting);
   const completed = activities.length - waiting.length;
-  const completionRate = activities.length ? Math.round((completed / activities.length) * 100) : 0;
-  const average = records.length ? (activities.length / records.length).toFixed(1).replace(".", ",") : "0";
-  const typeCounts = countBy(records, (record) => record.metadata.tipoManutencao || "Não informado");
+  const completionRate = activities.length
+    ? Math.round((completed / activities.length) * 100)
+    : 0;
+  const average = records.length
+    ? (activities.length / records.length).toFixed(1).replace(".", ",")
+    : "0";
+  const typeCounts = countBy(
+    records,
+    (record) => record.metadata.tipoManutencao || "Não informado"
+  );
   const topType = sortedEntries(typeCounts)[0];
   const monthly = buildMonthlySeries(records);
-  const recent = records.slice().sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 5);
+  const recent = records
+    .slice()
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+    .slice(0, 5);
+
   dashboardContent.innerHTML = `
-    ${records.length !== state.records.length ? `<div class="filter-context"><strong>${records.length}</strong> de ${state.records.length} medições consideradas nos indicadores.</div>` : ""}
+    ${
+      records.length !== state.records.length
+        ? `<div class="filter-context"><strong>${records.length}</strong> de ${state.records.length} medições consideradas nos indicadores.</div>`
+        : ""
+    }
     <section class="dashboard-metrics">
       ${dashboardMetric("Medições", records.length, "registros salvos")}
       ${dashboardMetric("Atividades", activities.length, `${average} por medição`)}
@@ -1333,29 +1659,70 @@ function renderDashboard() {
       ${dashboardMetric("Em espera", waiting.length, waiting.length ? "exigem acompanhamento" : "sem pendências", waiting.length ? "amber" : "green")}
       ${dashboardMetric("Taxa de conclusão", `${completionRate}%`, `${completed} de ${activities.length} atividades`, "blue")}
     </section>
+
     <section class="dashboard-grid">
       <article class="panel dashboard-panel">
-        <div class="panel-title"><div><h2>Tipos de manutenção</h2><p>Distribuição quantitativa das medições.</p></div></div>
+        <div class="panel-title">
+          <div>
+            <h2>Tipos de manutenção</h2>
+            <p>Distribuição quantitativa das medições.</p>
+          </div>
+        </div>
         ${renderBarChart(sortedEntries(typeCounts), records.length, "Nenhuma medição registrada.")}
       </article>
+
       <article class="panel dashboard-panel">
-        <div class="panel-title"><div><h2>Evolução mensal</h2><p>Medições salvas nos últimos seis meses.</p></div></div>
+        <div class="panel-title">
+          <div>
+            <h2>Evolução mensal</h2>
+            <p>Medições salvas nos últimos seis meses.</p>
+          </div>
+        </div>
         ${renderMonthlyChart(monthly)}
       </article>
     </section>
+
     <section class="dashboard-grid dashboard-grid--analysis">
       <article class="panel dashboard-panel">
-        <div class="panel-title"><div><h2>Análise operacional</h2><p>Leitura automática dos dados registrados.</p></div></div>
+        <div class="panel-title">
+          <div>
+            <h2>Análise operacional</h2>
+            <p>Leitura automática dos dados registrados.</p>
+          </div>
+        </div>
         <div class="insight-list">
           ${insightItem("Maior demanda", topType ? `${topType[0]} representa ${percentage(topType[1], records.length)}% das medições.` : "Aguardando registros para identificar a maior demanda.")}
           ${insightItem("Acompanhamento", waiting.length ? `${waiting.length} atividade(s) estão em espera em ${records.filter((record) => filledActivities(record).some(isWaiting)).length} medições.` : "Sem atividades em espera atualmente.")}
           ${insightItem("Produtividade", records.length ? `A média atual é de ${average} atividade(s) por medição.` : "A média será calculada após o primeiro registro.")}
         </div>
-        ${waiting.length ? `<div class="waiting-reasons"><strong>Motivos recentes de espera</strong>${waiting.slice(0, 4).map((activity) => `<p>${escapeHtml(activity.motivo || "Motivo não informado")}</p>`).join("")}</div>` : ""}
+        ${waiting.length ? `
+          <div class="waiting-reasons">
+            <strong>Motivos recentes de espera</strong>
+            ${waiting.slice(0, 4).map((activity) => `<p>${escapeHtml(activity.motivo || "Motivo não informado")}</p>`).join("")}
+          </div>
+        ` : ""}
       </article>
+
       <article class="panel dashboard-panel">
-        <div class="panel-title"><div><h2>Medições recentes</h2><p>Últimos registros atualizados.</p></div></div>
-        ${recent.length ? `<div class="recent-records">${recent.map((record) => `<button type="button" data-open-record="${escapeAttr(record.id)}"><span><strong>${escapeHtml(recordLabel(record))}</strong><small>${escapeHtml(record.metadata.tipoManutencao || "Tipo não informado")}</small></span><span>${formatDate(record.updatedAt)} <i data-lucide="chevron-right" aria-hidden="true"></i></span></button>`).join("")}</div>` : `<div class="chart-empty">Nenhuma medição registrada.</div>`}
+        <div class="panel-title">
+          <div>
+            <h2>Medições recentes</h2>
+            <p>Últimos registros atualizados.</p>
+          </div>
+        </div>
+        ${recent.length ? `
+          <div class="recent-records">
+            ${recent.map((record) => `
+              <button type="button" data-open-record="${escapeAttr(record.id)}">
+                <span>
+                  <strong>${escapeHtml(recordLabel(record))}</strong>
+                  <small>${escapeHtml(record.metadata.tipoManutencao || "Tipo não informado")}</small>
+                </span>
+                <span>${formatDate(record.updatedAt)} <i data-lucide="chevron-right" aria-hidden="true"></i></span>
+              </button>
+            `).join("")}
+          </div>
+        ` : `<div class="chart-empty">Nenhuma medição registrada.</div>`}
       </article>
     </section>
   `;
@@ -1365,7 +1732,11 @@ function renderDashboard() {
 function dashboardFilteredRecords() {
   const period = dashboardPeriodFilter.value;
   const type = dashboardTypeFilter.value;
-  const threshold = period === "all" ? null : new Date(Date.now() - Number(period) * 24 * 60 * 60 * 1000);
+  const threshold =
+    period === "all"
+      ? null
+      : new Date(Date.now() - Number(period) * 24 * 60 * 60 * 1000);
+
   return state.records.filter((record) => {
     if (type !== "all" && record.metadata.tipoManutencao !== type) return false;
     if (threshold) {
@@ -1377,30 +1748,102 @@ function dashboardFilteredRecords() {
 }
 
 function renderOperations() {
-  const records = state.records.slice().sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  const activities = records.flatMap((record) => filledActivities(record).map((activity) => ({ activity, record })));
+  const records = state.records
+    .slice()
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  const activities = records.flatMap((record) =>
+    filledActivities(record).map((activity) => ({ activity, record }))
+  );
   const waiting = activities.filter(({ activity }) => isWaiting(activity));
-  const responsibleCounts = countBy(activities.filter(({ activity }) => activity.responsavel), ({ activity }) => activity.responsavel);
+  const responsibleCounts = countBy(
+    activities.filter(({ activity }) => activity.responsavel),
+    ({ activity }) => activity.responsavel
+  );
   const latestExports = records.filter((record) => record.lastExportedAt).slice(0, 5);
+
   operationsContent.innerHTML = `
     <section class="operations-summary">
       ${operationMetric("Pendências abertas", waiting.length, waiting.length ? "requerem acompanhamento" : "operação em dia", waiting.length ? "amber" : "green")}
       ${operationMetric("Responsáveis técnicos ativos", Object.keys(responsibleCounts).length, "nomes identificados", "blue")}
       ${operationMetric("Relatórios exportados", latestExports.length, "entre os registros recentes", "teal")}
     </section>
+
     <section class="operations-layout">
       <article class="panel operations-primary">
-        <div class="panel-title"><div><h2>Fila de acompanhamento</h2><p>Atividades em espera, ordenadas pela atualização da medição.</p></div><span class="section-count">${waiting.length}</span></div>
-        ${waiting.length ? `<div class="operations-table"><div class="operations-table__head"><span>Ordem / atividade</span><span>Responsável técnico</span><span>Motivo</span><span>Atualização</span></div>${waiting.map(({ activity, record }) => `<button type="button" class="operations-row" data-open-record="${escapeAttr(record.id)}"><span><strong>${escapeHtml(recordLabel(record))}</strong><small>${escapeHtml(activity.atividade)}</small></span><span>${escapeHtml(activity.responsavel || "Não informado")}</span><span>${escapeHtml(activity.motivo || "Motivo não informado")}</span><span>${formatDate(record.updatedAt)}</span></button>`).join("")}</div>` : `<div class="positive-state"><i data-lucide="circle-check-big" aria-hidden="true"></i><strong>Nenhuma atividade em espera</strong><p>As medições registradas não possuem pendências abertas.</p></div>`}
+        <div class="panel-title">
+          <div>
+            <h2>Fila de acompanhamento</h2>
+            <p>Atividades em espera, ordenadas pela atualização da medição.</p>
+          </div>
+          <span class="section-count">${waiting.length}</span>
+        </div>
+        ${
+          waiting.length
+            ? `<div class="operations-table">
+                <div class="operations-table__head">
+                  <span>Ordem / atividade</span>
+                  <span>Responsável técnico</span>
+                  <span>Motivo</span>
+                  <span>Atualização</span>
+                </div>
+                ${waiting
+                  .map(
+                    ({ activity, record }) => `
+                      <button type="button" class="operations-row" data-open-record="${escapeAttr(record.id)}">
+                        <span>
+                          <strong>${escapeHtml(recordLabel(record))}</strong>
+                          <small>${escapeHtml(activity.atividade)}</small>
+                        </span>
+                        <span>${escapeHtml(activity.responsavel || "Não informado")}</span>
+                        <span>${escapeHtml(activity.motivo || "Motivo não informado")}</span>
+                        <span>${formatDate(record.updatedAt)}</span>
+                      </button>
+                    `
+                  )
+                  .join("")}
+              </div>`
+            : `<div class="positive-state">
+                <i data-lucide="circle-check-big" aria-hidden="true"></i>
+                <strong>Nenhuma atividade em espera</strong>
+                <p>As medições registradas não possuem pendências abertas.</p>
+              </div>`
+        }
       </article>
+
       <aside class="operations-side">
         <article class="panel">
-          <div class="panel-title"><div><h2>Distribuição por responsável técnico</h2><p>Quantidade de atividades registradas.</p></div></div>
+          <div class="panel-title">
+            <div>
+              <h2>Distribuição por responsável técnico</h2>
+              <p>Quantidade de atividades registradas.</p>
+            </div>
+          </div>
           ${renderBarChart(sortedEntries(responsibleCounts).slice(0, 6), activities.length, "Nenhum responsável técnico informado.")}
         </article>
         <article class="panel">
-          <div class="panel-title"><div><h2>Últimas exportações</h2><p>Relatórios gerados recentemente.</p></div></div>
-          ${latestExports.length ? `<div class="export-history">${latestExports.map((record) => `<button type="button" data-open-record="${escapeAttr(record.id)}"><span><strong>${escapeHtml(recordLabel(record))}</strong><small>${escapeHtml(record.metadata.competencia || "Sem competência")}</small></span><time>${formatDateTime(record.lastExportedAt)}</time></button>`).join("")}</div>` : `<div class="compact-empty">Nenhum relatório exportado ainda.</div>`}
+          <div class="panel-title">
+            <div>
+              <h2>Últimas exportações</h2>
+              <p>Relatórios gerados recentemente.</p>
+            </div>
+          </div>
+          ${
+            latestExports.length
+              ? `<div class="export-history">${latestExports
+                  .map(
+                    (record) => `
+                      <button type="button" data-open-record="${escapeAttr(record.id)}">
+                        <span>
+                          <strong>${escapeHtml(recordLabel(record))}</strong>
+                          <small>${escapeHtml(record.metadata.competencia || "Sem competência")}</small>
+                        </span>
+                        <time>${formatDateTime(record.lastExportedAt)}</time>
+                      </button>
+                    `
+                  )
+                  .join("")}</div>`
+              : `<div class="compact-empty">Nenhum relatório exportado ainda.</div>`
+          }
         </article>
       </aside>
     </section>
@@ -1409,22 +1852,54 @@ function renderOperations() {
 }
 
 function operationMetric(label, value, hint, tone) {
-  return `<article class="operation-metric is-${tone}"><span>${label}</span><strong>${value}</strong><small>${hint}</small></article>`;
+  return `
+    <article class="operation-metric is-${tone}">
+      <span>${label}</span>
+      <strong>${value}</strong>
+      <small>${hint}</small>
+    </article>
+  `;
 }
 
 function dashboardMetric(label, value, hint, tone = "") {
-  return `<article class="dashboard-metric ${tone ? `is-${tone}` : ""}"><span>${label}</span><strong>${value}</strong><small>${hint}</small></article>`;
+  return `
+    <article class="dashboard-metric ${tone ? `is-${tone}` : ""}">
+      <span>${label}</span>
+      <strong>${value}</strong>
+      <small>${hint}</small>
+    </article>
+  `;
 }
 
 function renderBarChart(entries, total, emptyMessage) {
   if (!entries.length) return `<div class="chart-empty">${emptyMessage}</div>`;
   const max = Math.max(...entries.map(([, value]) => value), 1);
-  return `<div class="bar-chart">${entries.map(([label, value]) => `<div class="bar-row"><span>${escapeHtml(label)}</span><div><i style="width:${Math.round((value / max) * 100)}%"></i></div><strong>${value} <small>(${percentage(value, total)}%)</small></strong></div>`).join("")}</div>`;
+  return `
+    <div class="bar-chart">
+      ${entries.map(([label, value]) => `
+        <div class="bar-row">
+          <span>${escapeHtml(label)}</span>
+          <div><i style="width:${Math.round((value / max) * 100)}%"></i></div>
+          <strong>${value} <small>(${percentage(value, total)}%)</small></strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderMonthlyChart(monthly) {
   const max = Math.max(...monthly.map((item) => item.value), 1);
-  return `<div class="monthly-chart">${monthly.map((item) => `<div class="month-column"><strong>${item.value}</strong><div><i style="height:${Math.max(6, Math.round((item.value / max) * 100))}%"></i></div><span>${item.label}</span></div>`).join("")}</div>`;
+  return `
+    <div class="monthly-chart">
+      ${monthly.map((item) => `
+        <div class="month-column">
+          <strong>${item.value}</strong>
+          <div><i style="height:${Math.max(6, Math.round((item.value / max) * 100))}%"></i></div>
+          <span>${item.label}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function insightItem(title, text) {
@@ -1437,20 +1912,34 @@ function buildMonthlySeries(records) {
   return Array.from({ length: 6 }, (_, offset) => {
     const date = new Date(now.getFullYear(), now.getMonth() - (5 - offset), 1);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    return { key, label: formatter.format(date).replace(".", ""), value: records.filter((record) => String(record.createdAt).slice(0, 7) === key).length };
+    return {
+      key,
+      label: formatter.format(date).replace(".", ""),
+      value: records.filter((record) => String(record.createdAt).slice(0, 7) === key).length
+    };
   });
 }
 
 function validateActivities() {
-  const filled = activityCards.filter(({ fields }) => fields.atividade.value.trim());
+  const filled = activityCards.filter(({ fields }) =>
+    fields.atividade.value.trim()
+  );
   if (!filled.length) throw new Error("Cadastre ao menos um problema ou serviço executado.");
-  const missingOrder = filled.find(({ fields }) => !fields.ordemServico.value.trim() && !reportForm.elements.ordemServico.value.trim());
+
+  const missingOrder = filled.find(
+    ({ fields }) =>
+      !fields.ordemServico.value.trim() && !reportForm.elements.ordemServico.value.trim()
+  );
   if (missingOrder) {
     missingOrder.card.classList.add("is-open");
     missingOrder.fields.ordemServico.focus();
     throw new Error("Informe a OS da ocorrência ou a OS geral do formulário.");
   }
-  const waitingWithoutReason = filled.find(({ fields }) => fields.status.value === "em-espera" && !fields.motivo.value.trim());
+
+  const waitingWithoutReason = filled.find(
+    ({ fields }) =>
+      fields.status.value === "em-espera" && !fields.motivo.value.trim()
+  );
   if (waitingWithoutReason) {
     waitingWithoutReason.card.classList.add("is-open");
     waitingWithoutReason.fields.motivo.focus();
@@ -1459,13 +1948,150 @@ function validateActivities() {
 }
 
 function updateProgress() {
-  const total = activityCards.filter(({ fields }) => fields.atividade.value.trim()).length;
-  activityProgress.textContent = `${total} ${total === 1 ? "ocorrência" : "ocorrências"}`;
+  const total = activityCards.filter(({ fields }) =>
+    fields.atividade.value.trim()
+  ).length;
+  activityProgress.textContent = `${total} ${
+    total === 1 ? "ocorrência" : "ocorrências"
+  }`;
+}
+
+// Prepara o arquivo escolhido: imagens viram JPEG leve (o que aparece no PDF);
+// qualquer outro documento é guardado como veio. No banco de dados (Netlify ou
+// servidor próprio) o arquivo é enviado e o registro guarda só o endereço.
+async function prepareAttachment(file) {
+  if (!file) throw new Error("nenhum arquivo selecionado.");
+
+  let image = null;
+  if (file.size <= MAX_PHOTO_BYTES) {
+    try {
+      image = await imageToJpeg(file);
+    } catch {
+      image = null;
+    }
+  }
+
+  const blob = image ? image.blob : file;
+  const tipo = image ? "image/jpeg" : file.type || "application/octet-stream";
+  const nome = image ? jpegName(file.name) : file.name || "documento";
+
+  if (!image && file.size > MAX_DOCUMENT_BYTES) {
+    throw new Error("o documento passa de 15 MB. Escolha um arquivo menor.");
+  }
+
+  const looksLikePhoto =
+    /^image\//i.test(file.type || "") ||
+    /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff?|avif)$/i.test(file.name || "");
+  const notice =
+    !image && looksLikePhoto
+      ? "Esta foto não abriu neste navegador e foi anexada como documento (no PDF aparece só o nome). Para a imagem aparecer, envie em JPG ou PNG."
+      : "";
+
+  if (usesServerStorage()) {
+    const value = await uploadAttachment(blob, nome, tipo);
+    return { value, nome, tipo, notice, previewUrl: image ? image.dataUrl : "" };
+  }
+
+  const value = image ? image.dataUrl : await blobToDataUrl(blob);
+  return { value, nome, tipo, notice, previewUrl: image ? image.dataUrl : "" };
+}
+
+async function imageToJpeg(file) {
+  const dataUrl = await fileToDataUrl(file);
+  const blob = await (await fetch(dataUrl)).blob();
+  if (!blob.size) throw new Error("imagem vazia");
+  return { dataUrl, blob };
+}
+
+function jpegName(name = "") {
+  const base = String(name || "foto").replace(/\.[^.]+$/, "") || "foto";
+  return `${base}.jpg`;
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("não foi possível ler o arquivo."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function usesServerStorage() {
+  return Boolean(state.config.storage && state.config.storage !== "none");
+}
+
+// Só JPG e PNG contam como imagem: é o que o relatório consegue embutir.
+// As fotos escolhidas são sempre convertidas para JPG antes de salvar.
+function isImageType(tipo) {
+  return /^image\/(jpeg|jpg|png)$/i.test(String(tipo || "").trim());
+}
+
+function guessAttachmentType(value) {
+  const text = String(value || "");
+  const match = text.match(/^data:([^;,]+)/i);
+  if (match) return match[1];
+  return text ? "image/jpeg" : "";
+}
+
+function documentBadge(meta = {}) {
+  const fromName = String(meta.nome || "").match(/\.([A-Za-z0-9]{1,5})$/);
+  if (fromName) return fromName[1].toUpperCase();
+  const fromType = String(meta.tipo || "").split("/")[1];
+  return (fromType || "ARQ").slice(0, 5).toUpperCase();
+}
+
+async function uploadAttachment(blob, nome, tipo) {
+  const id = crypto.randomUUID();
+  const parts = Math.max(1, Math.ceil(blob.size / UPLOAD_PART_BYTES));
+  for (let part = 0; part < parts; part += 1) {
+    const chunk = blob.slice(part * UPLOAD_PART_BYTES, (part + 1) * UPLOAD_PART_BYTES);
+    const query = new URLSearchParams({
+      id,
+      part: String(part),
+      parts: String(parts),
+      size: String(blob.size),
+      name: nome,
+      type: tipo
+    });
+    await fetchWithRetry(`/api/files?${query}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: chunk
+    });
+  }
+  return `/api/files?id=${id}`;
+}
+
+async function fetchWithRetry(url, options, attempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, { credentials: "same-origin", ...options });
+      if (response.status === 401) {
+        redirectToLogin();
+        throw new Error("sessão expirada. Entre novamente.");
+      }
+      if (response.ok) return response;
+      const data = await response.json().catch(() => ({}));
+      lastError = new Error(data.error || `falha no envio (${response.status}).`);
+      if (response.status < 500 && response.status !== 429) break;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+  }
+  throw lastError;
 }
 
 async function fileToDataUrl(file) {
   if (!file) return "";
-  if (file.size > MAX_PHOTO_BYTES) throw new Error("a imagem passa de 30 MB. Escolha uma foto menor.");
+  // Não confia no tipo informado: alguns celulares entregam a foto sem tipo
+  // ou sem extensão. Se o navegador conseguir abrir, a foto é aceita.
+  if (file.size > MAX_PHOTO_BYTES) {
+    throw new Error("a imagem passa de 30 MB. Escolha uma foto menor.");
+  }
+
   const source = await decodeImage(file);
   try {
     const canvas = document.createElement("canvas");
@@ -1479,20 +2105,36 @@ async function fileToDataUrl(file) {
     const scale = Math.min(targetWidth / source.width, targetHeight / source.height);
     const width = source.width * scale;
     const height = source.height * scale;
-    context.drawImage(source.image, (targetWidth - width) / 2, (targetHeight - height) / 2, width, height);
+    context.drawImage(
+      source.image,
+      (targetWidth - width) / 2,
+      (targetHeight - height) / 2,
+      width,
+      height
+    );
     return canvas.toDataURL("image/jpeg", 0.65);
   } finally {
     source.release();
   }
 }
 
+// Abre a imagem em qualquer formato que o navegador saiba ler (JPG, PNG, WEBP,
+// HEIC em aparelhos compatíveis), respeitando a rotação gravada pela câmera.
 async function decodeImage(file) {
   if (typeof createImageBitmap === "function") {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-      return { image: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close?.() };
-    } catch { /* Tenta de novo abaixo */ }
+      return {
+        image: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        release: () => bitmap.close?.()
+      };
+    } catch {
+      // Tenta de novo pelo elemento <img> abaixo.
+    }
   }
+
   const sourceUrl = URL.createObjectURL(file);
   try {
     const image = await new Promise((resolve, reject) => {
@@ -1502,10 +2144,17 @@ async function decodeImage(file) {
       element.src = sourceUrl;
     });
     if (!image.naturalWidth || !image.naturalHeight) throw new Error("vazia");
-    return { image, width: image.naturalWidth, height: image.naturalHeight, release: () => URL.revokeObjectURL(sourceUrl) };
+    return {
+      image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      release: () => URL.revokeObjectURL(sourceUrl)
+    };
   } catch {
     URL.revokeObjectURL(sourceUrl);
-    throw new Error("este navegador não conseguiu abrir a imagem (formato não suportado). Envie a foto em JPG ou PNG.");
+    throw new Error(
+      "este navegador não conseguiu abrir a imagem (formato não suportado). Envie a foto em JPG ou PNG."
+    );
   }
 }
 
@@ -1514,9 +2163,17 @@ async function getServiceConfig() {
     const response = await fetch("/api/config", { credentials: "same-origin" });
     if (!response.ok) throw new Error("Configuração indisponível.");
     const config = await response.json();
-    return { recipient: config.recipient || "comercial1@primecsg.com.br", emailConfigured: Boolean(config.emailConfigured) };
+    return {
+      recipient: config.recipient || "comercial1@primecsg.com.br",
+      emailConfigured: Boolean(config.emailConfigured),
+      storage: config.storage || "none"
+    };
   } catch {
-    return { recipient: "comercial1@primecsg.com.br", emailConfigured: false };
+    return {
+      recipient: "comercial1@primecsg.com.br",
+      emailConfigured: false,
+      storage: "none"
+    };
   }
 }
 
@@ -1536,6 +2193,15 @@ function openDatabase() {
 }
 
 async function getAllRecords() {
+  if (usesServerStorage()) {
+    const response = await fetchWithRetry("/api/records", { method: "GET", cache: "no-store" });
+    const data = await response.json();
+    return Array.isArray(data.records) ? data.records : [];
+  }
+  return getAllLocalRecords();
+}
+
+async function getAllLocalRecords() {
   try {
     const database = await openDatabase();
     return await new Promise((resolve, reject) => {
@@ -1553,23 +2219,105 @@ async function getAllRecords() {
 }
 
 async function putRecord(record) {
+  if (usesServerStorage()) {
+    const prepared = await uploadInlineAttachments(record);
+    if (prepared !== record) {
+      record.activities = prepared.activities;
+    }
+    await fetchWithRetry("/api/records", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ record })
+    });
+    return;
+  }
+  return putLocalRecord(record);
+}
+
+// Registros antigos (ou backups) guardam as fotos dentro do próprio registro.
+// Antes de ir para o banco, cada foto vira um arquivo enviado separadamente.
+async function uploadInlineAttachments(record) {
+  const hasInline = (record.activities || []).some((activity) =>
+    ATTACHMENT_FIELDS.some((field) => String(activity?.[field] || "").startsWith("data:"))
+  );
+  if (!hasInline) return record;
+
+  const activities = [];
+  for (const activity of record.activities || []) {
+    const copy = { ...activity };
+    for (const field of ATTACHMENT_FIELDS) {
+      const value = String(copy[field] || "");
+      if (!value.startsWith("data:")) continue;
+      const blob = await (await fetch(value)).blob();
+      const tipo = copy[`${field}Tipo`] || blob.type || guessAttachmentType(value);
+      const nome = copy[`${field}Nome`] || (isImageType(tipo) ? "foto.jpg" : "documento");
+      copy[field] = await uploadAttachment(blob, nome, tipo);
+      copy[`${field}Nome`] = nome;
+      copy[`${field}Tipo`] = tipo;
+    }
+    activities.push(copy);
+  }
+  return { ...record, activities };
+}
+
+async function putLocalRecord(record) {
   const database = await openDatabase();
   return await new Promise((resolve, reject) => {
     const transaction = database.transaction(RECORD_STORE, "readwrite");
     transaction.objectStore(RECORD_STORE).put(record);
-    transaction.oncomplete = () => { database.close(); resolve(); };
-    transaction.onerror = () => { database.close(); reject(transaction.error); };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error);
+    };
   });
 }
 
 async function deleteRecord(id) {
+  if (usesServerStorage()) {
+    await fetchWithRetry(`/api/records?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    return;
+  }
   const database = await openDatabase();
   return await new Promise((resolve, reject) => {
     const transaction = database.transaction(RECORD_STORE, "readwrite");
     transaction.objectStore(RECORD_STORE).delete(id);
-    transaction.oncomplete = () => { database.close(); resolve(); };
-    transaction.onerror = () => { database.close(); reject(transaction.error); };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error);
+    };
   });
+}
+
+// Quando o sistema passa a usar o banco de dados, os registros que estavam só
+// neste navegador são enviados uma vez (a cópia local é mantida).
+async function sendLocalRecordsToServer() {
+  if (!usesServerStorage()) return;
+  try {
+    if (localStorage.getItem(MIGRATION_FLAG) === "1") return;
+  } catch {
+    return;
+  }
+  const local = await getAllLocalRecords();
+  if (local.length) {
+    const remote = await getAllRecords();
+    const remoteIds = new Set(remote.map((record) => record.id));
+    for (const record of local) {
+      if (!remoteIds.has(record.id)) await putRecord(structuredClone(record));
+    }
+  }
+  try {
+    localStorage.setItem(MIGRATION_FLAG, "1");
+  } catch {
+    // Sem armazenamento local: tenta de novo na próxima vez (ids repetidos são ignorados).
+  }
 }
 
 function upsertStateRecord(record) {
@@ -1579,7 +2327,9 @@ function upsertStateRecord(record) {
 }
 
 function filledActivities(record) {
-  return (record.activities || []).filter((activity) => String(activity.atividade || "").trim());
+  return (record.activities || []).filter((activity) =>
+    String(activity.atividade || "").trim()
+  );
 }
 
 function isWaiting(activity) {
@@ -1605,23 +2355,68 @@ function formatActivityDates(activity) {
 function filenameFromResponse(response) {
   const disposition = response.headers.get("Content-Disposition") || "";
   const match = disposition.match(/filename="([^"]+)"/i);
-  return match?.[1] || "";
+  return match?.[1] || `Relatorio Fotografico.${currentFormat()}`;
 }
 
-function reportFormatLabel(format) {
-  if (format === "pptx") return "PowerPoint";
-  if (format === "docx") return "Word";
-  return "PDF";
-  function reportFormatLabel(format) {
-  if (format === "pptx") return "PowerPoint";
-  if (format === "docx") return "Word";
-  if (format === "xlsx") return "Excel";
-  return "PDF";
+function loadExportFormat() {
+  try {
+    const saved = localStorage.getItem(FORMAT_STORAGE_KEY);
+    return REPORT_FORMATS[saved] ? saved : "pdf";
+  } catch {
+    return "pdf";
+  }
 }
+
+function currentFormat() {
+  return REPORT_FORMATS[state.exportFormat] ? state.exportFormat : "pdf";
+}
+
+function reportFormatLabel(format = currentFormat()) {
+  return (REPORT_FORMATS[format] || REPORT_FORMATS.pdf).label;
+}
+
+function setExportFormat(format) {
+  state.exportFormat = REPORT_FORMATS[format] ? format : "pdf";
+  try {
+    localStorage.setItem(FORMAT_STORAGE_KEY, state.exportFormat);
+  } catch {
+    // Sem armazenamento local: vale só nesta sessão.
+  }
+  syncFormatControls();
+  updateGenerateButton();
+  activityCards.forEach((entry) => entry.refreshExportLabel());
+  // Atualiza só os rótulos, sem redesenhar a lista (mantém as caixas abertas).
+  recordsList
+    .querySelectorAll('[data-record-action="export"], [data-record-action="export-activity"]')
+    .forEach((button) => {
+      button.textContent = `Baixar ${reportFormatLabel()}`;
+    });
+}
+
+function bindFormatSelectors() {
+  document.querySelectorAll("[data-report-format]").forEach((select) => {
+    select.addEventListener("change", () => setExportFormat(select.value));
+  });
+  document.querySelectorAll("[data-format-option]").forEach((button) => {
+    button.addEventListener("click", () => setExportFormat(button.dataset.formatOption));
+  });
+  syncFormatControls();
+}
+
+function syncFormatControls() {
+  const format = currentFormat();
+  document.querySelectorAll("[data-report-format]").forEach((select) => {
+    select.value = format;
+  });
+  document.querySelectorAll("[data-format-option]").forEach((button) => {
+    const active = button.dataset.formatOption === format;
+    button.setAttribute("aria-pressed", String(active));
+    button.classList.toggle("is-active", active);
+  });
 }
 
 function updateGenerateButton() {
-  generateButton.textContent = "Salvar e gerar PDF";
+  generateButton.textContent = `Salvar e gerar ${reportFormatLabel()}`;
 }
 
 function setFormMessage(message, type = "") {
@@ -1631,7 +2426,9 @@ function setFormMessage(message, type = "") {
 
 function formatDate(value) {
   if (!value) return "—";
-  const date = String(value).includes("T") ? new Date(value) : new Date(`${value}T12:00:00`);
+  const date = String(value).includes("T")
+    ? new Date(value)
+    : new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return String(value);
   return new Intl.DateTimeFormat("pt-BR").format(date);
 }
@@ -1640,11 +2437,17 @@ function formatDateTime(value) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(date);
 }
 
 function normalizeText(value) {
-  return String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 function countBy(items, selector) {
@@ -1664,7 +2467,12 @@ function percentage(value, total) {
 }
 
 function escapeHtml(value) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function escapeAttr(value) {
@@ -1672,5 +2480,10 @@ function escapeAttr(value) {
 }
 
 function refreshIcons() {
-  window.lucide?.createIcons({ attrs: { "aria-hidden": "true", "stroke-width": 1.8 } });
+  window.lucide?.createIcons({
+    attrs: {
+      "aria-hidden": "true",
+      "stroke-width": 1.8
+    }
+  });
 }

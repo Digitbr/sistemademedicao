@@ -1,15 +1,20 @@
 {
   "name": "sistema-medicao",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
     "usuario": "node scripts/usuarios.js",
-    "check": "node --check server.js && node --check app.js && node --check login.js && node --check api/config.js && node --check api/generate.js && node --check api/health.js && node --check api/login.js && node --check api/logout.js && node --check api/session.js && node --check lib/auth.js && node --check lib/report.js && node --check lib/brand-logo.js && node --check scripts/usuarios.js"
+    "check": "node --check server.js && node --check app.js && node --check login.js && node --check api/config.js && node --check api/generate.js && node --check api/health.js && node --check api/login.js && node --check api/logout.js && node --check api/session.js && node --check lib/auth.js && node --check lib/report.js && node --check lib/brand-logo.js && node --check scripts/usuarios.js && node --check lib/report-docx.js && node --check lib/report-pptx.js && node --check lib/storage.js && node --check lib/attachments.js && node --check api/records.js && node --check api/files.js && node --check netlify/functions/api.mjs && node --check lib/report-xlsx.js",
+    "build:netlify": "node scripts/build-netlify.js"
   },
   "dependencies": {
-    "pdf-lib": "^1.17.1"
+    "@netlify/blobs": "^11.1.0",
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
+    "pdf-lib": "^1.17.1",
+    "pptxgenjs": "^4.0.1"
   },
   "engines": {
     "node": ">=18"

@@ -8,10 +8,10 @@ Aplicação web para cadastro, acompanhamento e exportação de medições e rel
 - Visão operacional de pendências, responsáveis e exportações.
 - Registros editáveis, pesquisáveis e organizados em caixas.
 - Ocorrências adicionadas sob demanda pelo botão "+", com edição e exclusão individual.
-- Até quatro fotos por ocorrência: duas de "Antes" (em cima) e duas de "Depois" (embaixo), cada uma com descrição editável.
+- Até quatro anexos por ocorrência: dois de "Antes" (em cima) e dois de "Depois" (embaixo), cada um com descrição editável. Aceita fotos ou qualquer tipo de documento.
 - Backup e restauração do histórico local em JSON.
 - Status de atividades concluídas ou em espera, com motivo obrigatório.
-- Exportação de relatórios em PDF (uma ocorrência por página).
+- Exportação do relatório em PDF, Excel (.xlsx), PowerPoint (.pptx) ou Word (.docx): uma ocorrência por página, slide ou aba (no Excel há também a aba "Resumo").
 - Envio opcional do relatório por e-mail usando a Resend.
 - Tela de login: o sistema e a API só funcionam para usuários autenticados.
 - Logo do Grupo Autoglass no cabeçalho de cada página do PDF.
@@ -28,11 +28,21 @@ node scripts/usuarios.js listar
 
 Depois de adicionar ou remover usuários não é preciso reiniciar o servidor. A sessão dura 12 horas; após 5 tentativas erradas o login daquele e-mail fica bloqueado por 15 minutos.
 
-Em ambientes sem disco gravável (Vercel), configure a variável `AUTH_USERS` com o JSON no mesmo formato de `data/users.json` (gere com `node scripts/usuarios.js adicionar ...` e copie o conteúdo do arquivo). `SESSION_SECRET` é opcional; sem ela, a chave de sessão é derivada de `AUTH_USERS`. Sem `AUTH_USERS`, ninguém consegue entrar.
+Em ambientes sem disco gravável (Netlify, Vercel), configure a variável `AUTH_USERS` com o JSON no mesmo formato de `data/users.json` (gere com `node scripts/usuarios.js adicionar ...` e copie o conteúdo do arquivo). `SESSION_SECRET` é opcional; sem ela, a chave de sessão é derivada de `AUTH_USERS`. Sem `AUTH_USERS`, ninguém consegue entrar.
 
-## Persistência
+## Banco de dados
 
-As medições ficam armazenadas no IndexedDB do navegador. Use `Exportar backup` na aba Registros para transferir ou proteger o histórico. Uma futura migração para PostgreSQL pode substituir essa camada sem alterar o formato dos registros.
+O lugar onde as medições ficam guardadas depende de onde o sistema está hospedado:
+
+- **Netlify**: banco no Netlify Blobs (stores `medicao-registros` e `medicao-arquivos`). Registros e anexos ficam no servidor e aparecem em qualquer aparelho.
+- **Servidor Node próprio** (`npm start`): pasta `data/` do servidor (`data/records` e `data/files`).
+- **Vercel**: sem banco; os registros ficam no IndexedDB do navegador.
+
+Cada anexo (foto ou documento) é enviado separadamente para `/api/files` em partes de 2 MB e o registro guarda só a referência. Fotos são convertidas para JPG no navegador antes do envio; qualquer outro tipo de arquivo (PDF, Word, planilha, texto etc., até 15 MB) é guardado como está e aparece no relatório pelo nome. Quando o sistema passa a usar o banco, os registros que estavam só no navegador são enviados uma vez automaticamente. `Exportar backup` na aba Registros continua disponível.
+
+### Netlify
+
+O `netlify.toml` já traz a configuração: build `npm run build:netlify`, publicação da pasta `dist` e a função `netlify/functions/api.mjs`, que atende `/api/*` com os mesmos handlers do servidor Node. No painel do site, cadastre a variável `AUTH_USERS` (veja "Acesso").
 
 ## Variáveis de ambiente
 
