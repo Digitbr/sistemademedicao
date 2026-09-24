@@ -24,10 +24,19 @@ export default async function handler(request, response) {
   try {
     const payload =
       typeof request.body === "string" ? JSON.parse(request.body) : request.body;
-    payload.activities = await resolveAttachments(payload?.activities);
+    if (Array.isArray(payload?.groups)) {
+      // Várias medições no mesmo arquivo: carrega os anexos de cada uma.
+      for (const group of payload.groups) {
+        group.activities = await resolveAttachments(group?.activities);
+      }
+    } else {
+      payload.activities = await resolveAttachments(payload?.activities);
+    }
     const report = await buildReport(payload);
     const recipient = reportRecipient(payload);
-    const emailStatus = await sendReportEmail(report, recipient);
+    // Exportação de seleção em lote só baixa o arquivo; não dispara e-mails.
+    const emailStatus =
+      payload?.skipEmail === true ? "skipped" : await sendReportEmail(report, recipient);
 
     response.setHeader("Content-Type", report.contentType);
     response.setHeader("Content-Disposition", `attachment; filename="${report.filename}"`);

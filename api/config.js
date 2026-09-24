@@ -20,9 +20,19 @@ export default async function handler(request, response) {
     console.error("Banco de dados indisponível:", error);
   }
 
+  // Limites para exportar várias ocorrências de uma vez. Em ambientes serverless
+  // (Netlify/Vercel) a resposta e o corpo da requisição são pequenos, então o
+  // navegador divide a seleção em vários arquivos.
+  const serverless = Boolean(process.env.VERCEL || process.env.MEDICAO_SERVERLESS);
+  const exportLimits = {
+    maxOccurrences: serverless ? 8 : 60,
+    maxRequestBytes: serverless ? 3.5 * 1024 * 1024 : 40 * 1024 * 1024
+  };
+
   response.status(200).json({
     recipient: process.env.REPORT_RECIPIENT || DEFAULT_RECIPIENT,
     emailConfigured: Boolean(process.env.RESEND_API_KEY),
-    storage
+    storage,
+    exportLimits
   });
 }
