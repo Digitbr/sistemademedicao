@@ -9,7 +9,8 @@ Aplicação web para cadastro, acompanhamento e exportação de medições e rel
 - Registros editáveis, pesquisáveis e organizados em caixas.
 - Ocorrências adicionadas sob demanda pelo botão "+", com edição e exclusão individual.
 - Até quatro anexos por ocorrência: dois de "Antes" (em cima) e dois de "Depois" (embaixo), cada um com descrição editável. Aceita fotos ou qualquer tipo de documento.
-- Backup e restauração do histórico local em JSON.
+- Exportação em lote: na aba Registros, marque registros inteiros ou ocorrências avulsas (ou "Selecionar todos os exibidos") e use "Exportar selecionados" para baixar um único PDF, Excel, PowerPoint ou Word, uma ocorrência por página/slide/aba, na ordem da lista. A seleção acompanha os filtros e a exportação em lote não envia e-mail. Em Netlify/Vercel o arquivo é dividido automaticamente em partes menores (limite de tamanho da resposta).
+- Backup e restauração do histórico em JSON (com fotos e anexos dentro do arquivo), do sistema todo ou só dos registros selecionados.
 - Status de atividades concluídas ou em espera, com motivo obrigatório.
 - Exportação do relatório em PDF, Excel (.xlsx), PowerPoint (.pptx) ou Word (.docx): uma ocorrência por página, slide ou aba (no Excel há também a aba "Resumo").
 - Envio opcional do relatório por e-mail usando a Resend.
