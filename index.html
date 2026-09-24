@@ -8,7 +8,7 @@
       content="Geração e envio de relatórios fotográficos de manutenção."
     />
     <title>Sistema de Medição | Relatório Fotográfico</title>
-    <link rel="stylesheet" href="/styles.css?v=20260917-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260924-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -269,7 +269,7 @@
           <div>
             <p class="eyebrow">Histórico</p>
             <h1>Registros de medições</h1>
-            <p>Abra uma caixa para visualizar, editar, exportar ou apagar.</p>
+            <p>Abra uma caixa para visualizar, editar, exportar ou apagar. Marque as caixas de seleção para exportar vários registros de uma vez.</p>
           </div>
           <div class="page-actions">
             <input type="file" id="records-import-input" accept="application/json" hidden />
@@ -337,6 +337,28 @@
               Limpar filtros
             </button>
           </div>
+        </section>
+
+        <section class="panel records-selection" id="records-selection" aria-label="Seleção de registros para exportar">
+          <label class="records-selection__all">
+            <input type="checkbox" id="select-all-records" />
+            <span>Selecionar todos os exibidos</span>
+          </label>
+          <span class="records-selection__count" id="selection-summary" role="status">
+            Nenhum registro selecionado
+          </span>
+          <div class="records-selection__actions">
+            <button type="button" class="text-action" id="clear-selection" disabled>
+              Limpar seleção
+            </button>
+            <button type="button" class="secondary-action" id="backup-selection" disabled>
+              Backup dos selecionados
+            </button>
+            <button type="button" class="primary-action" id="export-selection" disabled>
+              Exportar selecionados
+            </button>
+          </div>
+          <p class="records-selection__status" id="selection-status" role="status" hidden></p>
         </section>
 
         <div id="records-list" class="records-list"></div>
@@ -520,6 +542,6 @@
     </template>
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="/app.js?v=20260917-3"></script>
+    <script src="/app.js?v=20260924-1"></script>
   </body>
 </html>
