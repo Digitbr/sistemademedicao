@@ -56,13 +56,27 @@ const currentDate = document.querySelector("#current-date");
 const sidebar = document.querySelector("#sidebar");
 const sidebarToggle = document.querySelector("#sidebar-toggle");
 const sidebarOverlay = document.querySelector("#sidebar-overlay");
+const selectionBar = document.querySelector("#records-selection");
+const selectAllRecords = document.querySelector("#select-all-records");
+const selectionSummary = document.querySelector("#selection-summary");
+const selectionStatus = document.querySelector("#selection-status");
+const clearSelectionButton = document.querySelector("#clear-selection");
+const exportSelectionButton = document.querySelector("#export-selection");
+const backupSelectionButton = document.querySelector("#backup-selection");
 const activityCards = [];
+
+// Limites usados enquanto o servidor não informa os seus (/api/config).
+const DEFAULT_EXPORT_LIMITS = { maxOccurrences: 8, maxRequestBytes: 3.5 * 1024 * 1024 };
 
 const state = {
   exportFormat: loadExportFormat(),
   view: "report",
   records: [],
   editingRecordId: null,
+  // Registros marcados para exportar: id do registro -> conjunto com as posições
+  // das ocorrências marcadas (posição dentro de filledActivities).
+  selection: new Map(),
+  exporting: false,
   config: {
     recipient: "comercial1@primecsg.com.br",
     emailConfigured: false
@@ -83,6 +97,7 @@ async function startApp() {
   bindRecordFilters();
   bindRecordActions();
   bindBackupActions();
+  bindSelectionActions();
   bindReportForm();
   bindFormatSelectors();
   initialize();
@@ -796,9 +811,277 @@ function bindRecordActions() {
 }
 
 function bindBackupActions() {
-  exportRecordsButton.addEventListener("click", exportRecordsBackup);
+  exportRecordsButton.addEventListener("click", () =>
+    downloadBackup(state.records, exportRecordsButton)
+  );
   importRecordsButton.addEventListener("click", () => recordsImportInput.click());
   recordsImportInput.addEventListener("change", importRecordsBackup);
+}
+
+function bindSelectionActions() {
+  recordsList.addEventListener("change", (event) => {
+    const recordInput = event.target.closest("[data-select-record]");
+    if (recordInput) {
+      const record = state.records.find((item) => item.id === recordInput.dataset.selectRecord);
+      if (record) setRecordSelected(record, recordInput.checked);
+      syncSelectionUI();
+      return;
+    }
+    const activityInput = event.target.closest("[data-select-activity]");
+    if (activityInput) {
+      const record = state.records.find((item) => item.id === activityInput.dataset.selectActivity);
+      if (record) {
+        setActivitySelected(record, Number(activityInput.dataset.activityIndex), activityInput.checked);
+      }
+      syncSelectionUI();
+    }
+  });
+
+  selectAllRecords.addEventListener("change", () => {
+    for (const id of state.visibleRecordIds || []) {
+      const record = state.records.find((item) => item.id === id);
+      if (record) setRecordSelected(record, selectAllRecords.checked);
+    }
+    syncSelectionUI();
+  });
+
+  clearSelectionButton.addEventListener("click", () => {
+    state.selection.clear();
+    setSelectionMessage("");
+    syncSelectionUI();
+  });
+
+  exportSelectionButton.addEventListener("click", exportSelection);
+  backupSelectionButton.addEventListener("click", () => {
+    const records = sortRecords(state.records.filter((record) => state.selection.get(record.id)?.size));
+    downloadBackup(records, backupSelectionButton);
+  });
+}
+
+function setRecordSelected(record, selected) {
+  const total = filledActivities(record).length;
+  if (selected && total) {
+    state.selection.set(record.id, new Set(Array.from({ length: total }, (_, index) => index)));
+  } else {
+    state.selection.delete(record.id);
+  }
+}
+
+function setActivitySelected(record, index, selected) {
+  const set = state.selection.get(record.id) || new Set();
+  if (selected) set.add(index);
+  else set.delete(index);
+  if (set.size) state.selection.set(record.id, set);
+  else state.selection.delete(record.id);
+}
+
+// Tira da seleção o que não existe mais (registro apagado ou ocorrência removida).
+function pruneSelection() {
+  for (const [id, indices] of state.selection) {
+    const record = state.records.find((item) => item.id === id);
+    const total = record ? filledActivities(record).length : 0;
+    for (const index of [...indices]) if (index >= total) indices.delete(index);
+    if (!indices.size) state.selection.delete(id);
+  }
+}
+
+// Registros selecionados na ordem escolhida em "Ordenar por".
+function selectedItems() {
+  const records = sortRecords(
+    state.records.filter((record) => state.selection.get(record.id)?.size)
+  );
+  return records.map((record) => ({
+    record,
+    indices: [...state.selection.get(record.id)].sort((a, b) => a - b)
+  }));
+}
+
+function syncSelectionUI() {
+  if (!selectionBar) return;
+  const visible = new Set(state.visibleRecordIds || []);
+  let occurrences = 0;
+  let hidden = 0;
+  for (const [id, indices] of state.selection) {
+    occurrences += indices.size;
+    if (!visible.has(id)) hidden += 1;
+  }
+  const records = state.selection.size;
+
+  recordsList.querySelectorAll("[data-select-record]").forEach((input) => {
+    const record = state.records.find((item) => item.id === input.dataset.selectRecord);
+    const total = record ? filledActivities(record).length : 0;
+    const count = state.selection.get(input.dataset.selectRecord)?.size || 0;
+    input.checked = total > 0 && count === total;
+    input.indeterminate = count > 0 && count < total;
+    input.closest(".record-box")?.classList.toggle("is-selected", count > 0);
+  });
+  recordsList.querySelectorAll("[data-select-activity]").forEach((input) => {
+    input.checked = Boolean(
+      state.selection.get(input.dataset.selectActivity)?.has(Number(input.dataset.activityIndex))
+    );
+  });
+
+  const selectable = (state.visibleRecordIds || []).filter((id) => {
+    const record = state.records.find((item) => item.id === id);
+    return record && filledActivities(record).length;
+  });
+  const selectedVisible = selectable.filter((id) => {
+    const record = state.records.find((item) => item.id === id);
+    return state.selection.get(id)?.size === filledActivities(record).length;
+  });
+  const partialVisible = selectable.some((id) => state.selection.get(id)?.size);
+  selectAllRecords.disabled = !selectable.length || state.exporting;
+  selectAllRecords.checked = selectable.length > 0 && selectedVisible.length === selectable.length;
+  selectAllRecords.indeterminate = !selectAllRecords.checked && partialVisible;
+
+  selectionBar.classList.toggle("has-selection", records > 0);
+  selectionSummary.textContent = records
+    ? `${occurrences} ${occurrences === 1 ? "ocorrência selecionada" : "ocorrências selecionadas"} em ${records} ${records === 1 ? "registro" : "registros"}${hidden ? ` · ${hidden} fora do filtro atual` : ""}`
+    : "Nenhum registro selecionado";
+
+  const busy = state.exporting;
+  exportSelectionButton.disabled = !records || busy;
+  backupSelectionButton.disabled = !records || busy;
+  clearSelectionButton.disabled = !records || busy;
+  if (!busy) exportSelectionButton.textContent = `Exportar selecionados (${reportFormatLabel()})`;
+}
+
+function setSelectionMessage(message, type = "") {
+  if (!selectionStatus) return;
+  selectionStatus.textContent = message;
+  selectionStatus.hidden = !message;
+  selectionStatus.className = `records-selection__status${type ? ` ${type}-text` : ""}`;
+}
+
+// Divide a seleção em arquivos que caibam nos limites do servidor. Em servidor
+// próprio quase sempre sai um arquivo só; em Netlify/Vercel, vários pequenos.
+function buildExportChunks(items, limits) {
+  const chunks = [];
+  let current = null;
+  for (const { record, indices } of items) {
+    const activities = filledActivities(record);
+    for (const index of indices) {
+      const activity = activities[index];
+      if (!activity) continue;
+      const [prepared] = reportActivities([
+        {
+          ...activity,
+          ordemServico: activity.ordemServico || record.metadata.ordemServico || ""
+        }
+      ]);
+      const size = JSON.stringify(prepared).length + 400;
+      if (
+        current &&
+        (current.count >= limits.maxOccurrences ||
+          current.bytes + size > limits.maxRequestBytes)
+      ) {
+        current = null;
+      }
+      if (!current) {
+        current = { groups: [], recordIds: new Set(), count: 0, bytes: 0 };
+        chunks.push(current);
+      }
+      let group = current.groups.at(-1);
+      if (!group || group.recordId !== record.id) {
+        group = { recordId: record.id, metadata: record.metadata, activities: [] };
+        current.groups.push(group);
+        current.recordIds.add(record.id);
+      }
+      group.activities.push(prepared);
+      current.count += 1;
+      current.bytes += size;
+    }
+  }
+  return chunks;
+}
+
+function withPartSuffix(filename, part, total) {
+  if (total <= 1) return filename;
+  return filename.replace(/(\.[^.]+)$/, ` - parte ${part} de ${total}$1`);
+}
+
+async function exportSelection() {
+  if (state.exporting) return;
+  const items = selectedItems();
+  if (!items.length) return;
+
+  const format = currentFormat();
+  const formatLabel = reportFormatLabel(format);
+  const limits = { ...DEFAULT_EXPORT_LIMITS, ...(state.config.exportLimits || {}) };
+  const chunks = buildExportChunks(items, limits);
+  const total = chunks.reduce((sum, chunk) => sum + chunk.count, 0);
+  if (!total) return;
+
+  state.exporting = true;
+  syncSelectionUI();
+  exportSelectionButton.textContent = "Gerando...";
+  const exportedIds = new Set();
+  let downloaded = 0;
+
+  try {
+    for (const [position, chunk] of chunks.entries()) {
+      setSelectionMessage(
+        chunks.length > 1
+          ? `Gerando ${formatLabel} ${position + 1} de ${chunks.length}...`
+          : `Gerando ${formatLabel} com ${total} ${total === 1 ? "ocorrência" : "ocorrências"}...`
+      );
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groups: chunk.groups.map(({ metadata, activities }) => ({ metadata, activities })),
+          format,
+          skipEmail: true
+        })
+      });
+
+      if (response.status === 401) {
+        redirectToLogin();
+        throw new Error("Sessão expirada. Entre novamente.");
+      }
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "Falha ao gerar o relatório.");
+      }
+
+      const blob = await response.blob();
+      downloadBlob(blob, withPartSuffix(filenameFromResponse(response, format), position + 1, chunks.length));
+      downloaded += 1;
+      chunk.recordIds.forEach((id) => exportedIds.add(id));
+      // Pequena pausa: o navegador aceita melhor vários downloads seguidos.
+      if (position < chunks.length - 1) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    setSelectionMessage(
+      chunks.length > 1
+        ? `${downloaded} arquivos ${formatLabel} baixados (${total} ocorrências). O servidor limita o tamanho de cada arquivo; se o navegador pedir, permita downloads múltiplos.`
+        : `${formatLabel} baixado com ${total} ${total === 1 ? "ocorrência" : "ocorrências"}.`,
+      "success"
+    );
+  } catch (error) {
+    setSelectionMessage(
+      downloaded
+        ? `${error.message} (${downloaded} de ${chunks.length} arquivos já foram baixados.)`
+        : error.message,
+      "error"
+    );
+  } finally {
+    state.exporting = false;
+    // Registra a exportação nos registros que entraram em algum arquivo baixado.
+    const now = new Date().toISOString();
+    for (const record of state.records.filter((item) => exportedIds.has(item.id))) {
+      try {
+        record.lastExportedAt = now;
+        record.lastExportFormat = format;
+        await putRecord(record);
+        upsertStateRecord(record);
+      } catch (error) {
+        console.error("Não foi possível registrar a exportação.", error);
+      }
+    }
+    renderAllDataViews();
+  }
 }
 
 function bindReportForm() {
@@ -822,27 +1105,77 @@ function bindReportForm() {
   });
 }
 
-function exportRecordsBackup() {
-  const payload = JSON.stringify(
-    {
-      format: "medicao-pro-backup",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      records: state.records
-    },
-    null,
-    2
-  );
-  const url = URL.createObjectURL(
-    new Blob([payload], { type: "application/json;charset=utf-8" })
-  );
+// Backup em JSON. Com o banco de dados, o registro guarda só o endereço das
+// fotos; por isso cada anexo é baixado e gravado dentro do arquivo, para o
+// backup poder ser restaurado em qualquer lugar com todas as imagens.
+async function downloadBackup(records, button) {
+  if (!records.length) {
+    alert("Não há registros para o backup.");
+    return;
+  }
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  try {
+    const complete = [];
+    for (const [index, record] of records.entries()) {
+      button.textContent = `Reunindo anexos ${index + 1}/${records.length}...`;
+      setSelectionMessage(`Reunindo fotos e anexos para o backup (${index + 1} de ${records.length})...`);
+      complete.push(await embedRecordAttachments(record));
+    }
+
+    const payload = JSON.stringify(
+      {
+        format: "medicao-pro-backup",
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        records: complete
+      },
+      null,
+      2
+    );
+    downloadBlob(
+      new Blob([payload], { type: "application/json;charset=utf-8" }),
+      `backup-medicoes-${currentDateInputValue()}${records.length < state.records.length ? "-selecao" : ""}.json`
+    );
+    setSelectionMessage(`Backup com ${records.length} registro(s) baixado.`, "success");
+  } catch (error) {
+    setSelectionMessage(`Não foi possível gerar o backup: ${error.message}`, "error");
+    alert(`Não foi possível gerar o backup: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+    syncSelectionUI();
+  }
+}
+
+async function embedRecordAttachments(record) {
+  const copy = structuredClone(record);
+  for (const activity of copy.activities || []) {
+    for (const field of ATTACHMENT_FIELDS) {
+      const value = String(activity[field] || "");
+      if (!value || value.startsWith("data:")) continue;
+      const response = await fetchWithRetry(value, { method: "GET" });
+      const blob = await response.blob();
+      const tipo = activity[`${field}Tipo`] || blob.type || "application/octet-stream";
+      const dataUrl = await blobToDataUrl(blob);
+      // Garante o tipo correto no prefixo (data:<tipo>;base64,...).
+      activity[field] = dataUrl.replace(/^data:[^;,]*/, `data:${tipo}`);
+      activity[`${field}Tipo`] = tipo;
+    }
+  }
+  return copy;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `backup-medicoes-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.download = filename;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 async function importRecordsBackup(event) {
@@ -868,11 +1201,28 @@ async function importRecordsBackup(event) {
       return;
     }
 
-    await Promise.all(validRecords.map((record) => putRecord(record)));
+    // Um registro por vez: cada um envia as próprias fotos ao banco de dados.
+    let imported = 0;
+    const failed = [];
+    for (const [index, record] of validRecords.entries()) {
+      setSelectionMessage(`Importando ${index + 1} de ${validRecords.length}...`);
+      try {
+        await putRecord(record);
+        imported += 1;
+      } catch (error) {
+        failed.push(`${recordLabel(record)} (${error.message})`);
+      }
+    }
     state.records = await getAllRecords();
     renderAllDataViews();
-    alert(`${validRecords.length} medição(ões) importada(s) com sucesso.`);
+    setSelectionMessage("");
+    alert(
+      failed.length
+        ? `${imported} medição(ões) importada(s). Não foi possível importar: ${failed.join("; ")}`
+        : `${imported} medição(ões) importada(s) com sucesso.`
+    );
   } catch (error) {
+    setSelectionMessage("");
     alert(error.message || "Não foi possível importar o backup.");
   }
 }
@@ -1153,6 +1503,7 @@ async function deleteActivityFromRecord(record, activityIndex) {
 
   record.activities = remaining;
   record.updatedAt = new Date().toISOString();
+  state.selection.delete(record.id);
   await putRecord(record);
   upsertStateRecord(record);
   if (state.editingRecordId === record.id) {
@@ -1227,7 +1578,8 @@ async function collectCurrentRecord() {
       activities,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
-      lastExportedAt: existing?.lastExportedAt || ""
+      lastExportedAt: existing?.lastExportedAt || "",
+      lastExportFormat: existing?.lastExportFormat || ""
     };
   } finally {
     saveRecordButton.disabled = false;
@@ -1313,7 +1665,7 @@ async function exportSavedRecord(record, button, format = currentFormat(), optio
     const exportedRecord = options.touchRecord || record;
     exportedRecord.lastExportedAt = new Date().toISOString();
     exportedRecord.lastExportFormat = format;
-    exportedRecord.updatedAt = exportedRecord.lastExportedAt;
+    // updatedAt continua sendo a data da última edição (não é alterada ao exportar).
     await putRecord(exportedRecord);
     upsertStateRecord(exportedRecord);
     renderAllDataViews();
@@ -1407,11 +1759,25 @@ function renderFormWaitingReminders() {
     .join("");
 }
 
+function sortRecords(list) {
+  const sort = recordSortFilter.value;
+  return list.sort((a, b) => {
+    if (sort === "oldest") {
+      return String(a.updatedAt).localeCompare(String(b.updatedAt));
+    }
+    if (sort === "order") {
+      return recordLabel(a).localeCompare(recordLabel(b), "pt-BR", {
+        numeric: true
+      });
+    }
+    return String(b.updatedAt).localeCompare(String(a.updatedAt));
+  });
+}
+
 function renderRecords() {
   const search = normalizeText(recordSearch.value);
   const type = recordTypeFilter.value;
   const status = recordStatusFilter.value;
-  const sort = recordSortFilter.value;
   const filtered = state.records
     .filter((record) => {
       const activities = filledActivities(record);
@@ -1436,17 +1802,9 @@ function renderRecords() {
       return true;
     });
 
-  filtered.sort((a, b) => {
-    if (sort === "oldest") {
-      return String(a.updatedAt).localeCompare(String(b.updatedAt));
-    }
-    if (sort === "order") {
-      return recordLabel(a).localeCompare(recordLabel(b), "pt-BR", {
-        numeric: true
-      });
-    }
-    return String(b.updatedAt).localeCompare(String(a.updatedAt));
-  });
+  sortRecords(filtered);
+  state.visibleRecordIds = filtered.map((record) => record.id);
+  pruneSelection();
 
   recordsResultCount.textContent = `${filtered.length} ${
     filtered.length === 1 ? "registro" : "registros"
@@ -1463,6 +1821,7 @@ function renderRecords() {
       </div>
     `;
     refreshIcons();
+    syncSelectionUI();
     recordsList
       .querySelector("[data-go-to-empty]")
       ?.addEventListener("click", () => {
@@ -1482,6 +1841,7 @@ function renderRecords() {
     if (box) box.open = true;
   });
   refreshIcons();
+  syncSelectionUI();
 }
 
 function recordBox(record) {
@@ -1494,6 +1854,9 @@ function recordBox(record) {
   return `
     <details class="record-box" data-record-box="${escapeAttr(record.id)}">
       <summary>
+        <label class="record-select" title="Selecionar para exportar">
+          <input type="checkbox" data-select-record="${escapeAttr(record.id)}" aria-label="Selecionar ${escapeAttr(recordLabel(record))} para exportar"${activities.length ? "" : " disabled"} />
+        </label>
         <span class="record-main">
           <strong>${escapeHtml(recordLabel(record))}</strong>
           <small>${escapeHtml(record.metadata.competencia || "Sem competência")} · ${escapeHtml(record.metadata.tipoManutencao || "Tipo não informado")}</small>
@@ -1536,7 +1899,8 @@ function recordActivity(activity, index, record = null) {
   return `
     <article class="saved-activity">
       <div class="saved-activity__heading">
-        <span>${String(index + 1).padStart(2, "0")}</span>
+        ${record ? `<label class="activity-select" title="Selecionar esta ocorrência para exportar"><input type="checkbox" data-select-activity="${escapeAttr(record.id)}" data-activity-index="${index}" aria-label="Selecionar a ocorrência ${index + 1}" /></label>` : "<span></span>"}
+        <span class="saved-activity__number">${String(index + 1).padStart(2, "0")}</span>
         <div>
           <strong>${escapeHtml(activity.atividade)}</strong>
           <small>${escapeHtml(activity.ordemServico || "OS não informada")} · ${escapeHtml(activity.responsavel || "Sem responsável técnico")} · ${formatActivityDates(activity)}</small>
@@ -1759,13 +2123,16 @@ function renderOperations() {
     activities.filter(({ activity }) => activity.responsavel),
     ({ activity }) => activity.responsavel
   );
-  const latestExports = records.filter((record) => record.lastExportedAt).slice(0, 5);
+  const exportedRecords = records
+    .filter((record) => record.lastExportedAt)
+    .sort((a, b) => String(b.lastExportedAt).localeCompare(String(a.lastExportedAt)));
+  const latestExports = exportedRecords.slice(0, 5);
 
   operationsContent.innerHTML = `
     <section class="operations-summary">
       ${operationMetric("Pendências abertas", waiting.length, waiting.length ? "requerem acompanhamento" : "operação em dia", waiting.length ? "amber" : "green")}
       ${operationMetric("Responsáveis técnicos ativos", Object.keys(responsibleCounts).length, "nomes identificados", "blue")}
-      ${operationMetric("Relatórios exportados", latestExports.length, "entre os registros recentes", "teal")}
+      ${operationMetric("Relatórios exportados", exportedRecords.length, "medições com relatório baixado", "teal")}
     </section>
 
     <section class="operations-layout">
@@ -2166,13 +2533,15 @@ async function getServiceConfig() {
     return {
       recipient: config.recipient || "comercial1@primecsg.com.br",
       emailConfigured: Boolean(config.emailConfigured),
-      storage: config.storage || "none"
+      storage: config.storage || "none",
+      exportLimits: { ...DEFAULT_EXPORT_LIMITS, ...(config.exportLimits || {}) }
     };
   } catch {
     return {
       recipient: "comercial1@primecsg.com.br",
       emailConfigured: false,
-      storage: "none"
+      storage: "none",
+      exportLimits: { ...DEFAULT_EXPORT_LIMITS }
     };
   }
 }
@@ -2352,10 +2721,10 @@ function formatActivityDates(activity) {
   return `${before} a ${after}`;
 }
 
-function filenameFromResponse(response) {
+function filenameFromResponse(response, format = currentFormat()) {
   const disposition = response.headers.get("Content-Disposition") || "";
   const match = disposition.match(/filename="([^"]+)"/i);
-  return match?.[1] || `Relatorio Fotografico.${currentFormat()}`;
+  return match?.[1] || `Relatorio Fotografico.${format}`;
 }
 
 function loadExportFormat() {
@@ -2384,6 +2753,7 @@ function setExportFormat(format) {
   }
   syncFormatControls();
   updateGenerateButton();
+  syncSelectionUI();
   activityCards.forEach((entry) => entry.refreshExportLabel());
   // Atualiza só os rótulos, sem redesenhar a lista (mantém as caixas abertas).
   recordsList
