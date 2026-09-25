@@ -9,7 +9,10 @@ import logoutHandler from "../../api/logout.js";
 import recordsHandler from "../../api/records.js";
 import sessionHandler from "../../api/session.js";
 
-process.env.MEDICAO_STORAGE = process.env.MEDICAO_STORAGE || "netlify";
+// Sem Netlify Blobs, o Netlify fica sem disco gravável persistente: o
+// backend cai para "none" (mesmo comportamento da Vercel — os registros
+// ficam no IndexedDB do navegador).
+process.env.MEDICAO_STORAGE = process.env.MEDICAO_STORAGE || "none";
 process.env.MEDICAO_SERVERLESS = "1";
 
 const ROUTES = {
