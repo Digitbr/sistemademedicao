@@ -35,15 +35,16 @@ Em ambientes sem disco gravável (Netlify, Vercel), configure a variável `AUTH_
 
 O lugar onde as medições ficam guardadas depende de onde o sistema está hospedado:
 
-- **Netlify**: banco no Netlify Blobs (stores `medicao-registros` e `medicao-arquivos`). Registros e anexos ficam no servidor e aparecem em qualquer aparelho.
-- **Servidor Node próprio** (`npm start`): pasta `data/` do servidor (`data/records` e `data/files`).
-- **Vercel**: sem banco; os registros ficam no IndexedDB do navegador.
+- **Servidor Node próprio** (`npm start`, é o caso da Hostoo): pasta `data/` do servidor (`data/records` e `data/files`). Registros e anexos ficam no servidor e aparecem em qualquer aparelho.
+- **Vercel e Netlify**: sem banco no servidor (não há disco gravável persistente); os registros ficam no IndexedDB do navegador.
+
+O arquivo `schema.sql`, na raiz do repositório, descreve essa mesma estrutura (registro → ocorrências → anexos) em formato de banco relacional. É só documentação/referência para uma eventual migração — o sistema hoje não lê nem grava nele.
 
 Cada anexo (foto ou documento) é enviado separadamente para `/api/files` em partes de 2 MB e o registro guarda só a referência. Fotos são convertidas para JPG no navegador antes do envio; qualquer outro tipo de arquivo (PDF, Word, planilha, texto etc., até 15 MB) é guardado como está e aparece no relatório pelo nome. Quando o sistema passa a usar o banco, os registros que estavam só no navegador são enviados uma vez automaticamente. `Exportar backup` na aba Registros continua disponível.
 
 ### Netlify
 
-O `netlify.toml` já traz a configuração: build `npm run build:netlify`, publicação da pasta `dist` e a função `netlify/functions/api.mjs`, que atende `/api/*` com os mesmos handlers do servidor Node. No painel do site, cadastre a variável `AUTH_USERS` (veja "Acesso").
+O `netlify.toml` já traz a configuração: build `npm run build:netlify`, publicação da pasta `dist` e a função `netlify/functions/api.mjs`, que atende `/api/*` com os mesmos handlers do servidor Node. No painel do site, cadastre a variável `AUTH_USERS` (veja "Acesso"). Sem banco no servidor (veja "Banco de dados" acima), os registros ficam salvos no navegador de cada aparelho.
 
 ## Variáveis de ambiente
 

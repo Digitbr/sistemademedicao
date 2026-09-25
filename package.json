@@ -10,7 +10,6 @@
     "build:netlify": "node scripts/build-netlify.js"
   },
   "dependencies": {
-    "@netlify/blobs": "^11.1.0",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
     "pdf-lib": "^1.17.1",
