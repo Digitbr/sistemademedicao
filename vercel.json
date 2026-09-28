@@ -1,12 +1,5 @@
 {
-  "rewrites": [
-    { "source": "/", "destination": "/public/index.html" },
-    { "source": "/login", "destination": "/public/login.html" },
-    { "source": "/index.html", "destination": "/public/index.html" },
-    { "source": "/login.html", "destination": "/public/login.html" },
-    { "source": "/app.js", "destination": "/public/app.js" },
-    { "source": "/login.js", "destination": "/public/login.js" },
-    { "source": "/styles.css", "destination": "/public/styles.css" },
-    { "source": "/assets/:path*", "destination": "/public/assets/:path*" }
-  ]
+    "rewrites": [
+          { "source": "/login", "destination": "/login.html" }
+    ]
 }
