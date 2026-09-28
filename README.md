@@ -2,6 +2,10 @@
 
 Aplicação web para cadastro, acompanhamento e exportação de medições e relatórios fotográficos.
 
+## Estrutura
+
+O front-end (`index.html`, `login.html`, `app.js`, `login.js`, `styles.css`, `assets/`) fica em `public/`, seguindo o mesmo padrão usado nos outros sistemas. O `server.js` (Hostoo) e as funções serverless (Vercel/Netlify) servem esses arquivos a partir dali; as rotas continuam as mesmas (`/`, `/login`, `/app.js` etc.).
+
 ## Recursos
 
 - Dashboard com filtros por período e tipo de manutenção.
