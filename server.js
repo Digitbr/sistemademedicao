@@ -15,6 +15,7 @@ import filesHandler from "./api/files.js";
 import { readSession } from "./lib/auth.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = path.join(ROOT, "public");
 
 // Carrega variáveis de um .env ao lado do server.js, se existir (Hostoo).
 try {
@@ -151,8 +152,8 @@ function redirect(response, location) {
 }
 
 async function sendFile(requested, response, statusCode) {
-  const filePath = path.join(ROOT, requested);
-  if (!filePath.startsWith(ROOT)) {
+  const filePath = path.join(PUBLIC_DIR, requested);
+  if (!filePath.startsWith(PUBLIC_DIR)) {
     response.status(403).json({ error: "Acesso negado." });
     return;
   }
